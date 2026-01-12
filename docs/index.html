@@ -108,8 +108,8 @@ pre{
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
 <script>
 const API="https://api.github.com";
-const token="YOUR_NEW_FINE_GRAINED_TOKEN";  // CHANGE
-const githubUsername="authorization-tech"; // CHANGE
+const token="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";  // CHANGE: Your classic Personal Access Token
+const githubUsername="authorization-tech"; // CHANGE: Your actual GitHub username
 
 const log=m=>document.getElementById("log").textContent=
   typeof m==="string"?m:JSON.stringify(m,null,2);
@@ -121,19 +121,22 @@ window.onload=()=>{
   }
 };
 
-// FIXED AUTH HEADER
+// UPDATED FOR CLASSIC PAT - Uses "token" not "Bearer"
 async function api(path,method="GET",body){
   const res=await fetch(API+path,{
     method,
     headers:{
-      Authorization:"Bearer "+token,
+      Authorization:"token "+token,  // CHANGED: "token" for classic PAT
       Accept:"application/vnd.github+json",
       "Content-Type":"application/json"
     },
     body:body?JSON.stringify(body):null
   });
   const data=await res.json();
-  if(!res.ok) throw data;
+  if(!res.ok) {
+    log(`Error ${res.status}: ${data.message || 'Unknown error'}`);
+    throw data;
+  }
   return data;
 }
 
@@ -198,21 +201,29 @@ async function signUp(){
   if(!cropper) return log("Select profile picture");
 
   try{
+    log("Creating account...");
+    
     const repos=await api("/user/repos?per_page=100");
     const nums=repos.map(r=>r.name)
       .filter(n=>/^user\d+$/.test(n))
       .map(n=>+n.replace("user",""));
     const repoName="user"+((Math.max(0,...nums))+1);
-
+    
+    log(`Creating repository: ${repoName}`);
     await api("/user/repos","POST",{name:repoName,private:true});
+    
+    log("Saving username...");
     await api(`/repos/${githubUsername}/${repoName}/contents/username.txt`,
       "PUT",{message:"username",content:btoa(u)});
+    
+    log("Saving password...");
     await api(`/repos/${githubUsername}/${repoName}/contents/password.txt`,
       "PUT",{message:"password",content:btoa(p)});
 
     const blob=await getBlob();
     const reader=new FileReader();
     reader.onload=async e=>{
+      log("Uploading profile picture...");
       await api(`/repos/${githubUsername}/${repoName}/contents/profile.jpg`,
         "PUT",{message:"profile",content:e.target.result.split(",")[1]});
       localStorage.setItem("authUser",u);
@@ -220,7 +231,10 @@ async function signUp(){
       location.href="home.html";
     };
     reader.readAsDataURL(blob);
-  }catch(e){log(e)}
+  }catch(e){
+    log(`Signup failed: ${e.message || 'Unknown error'}`);
+    console.error(e);
+  }
 }
 
 // login
@@ -230,6 +244,7 @@ async function logIn(){
   if(!u||!p) return log("Username & password required");
 
   try{
+    log("Checking credentials...");
     const repos=await api("/user/repos?per_page=100");
     for(const r of repos){
       if(!/^user\d+$/.test(r.name)) continue;
@@ -242,10 +257,16 @@ async function logIn(){
           location.href="home.html";
           return;
         }
-      }catch{}
+      }catch(e){
+        // Skip repos that don't have the required files
+        continue;
+      }
     }
-    log("Invalid credentials");
-  }catch(e){log(e)}
+    log("Invalid credentials - no matching account found");
+  }catch(e){
+    log(`Login failed: ${e.message || 'Unknown error'}`);
+    console.error(e);
+  }
 }
 </script>
 </body>
