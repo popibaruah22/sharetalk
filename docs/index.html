@@ -109,35 +109,55 @@ pre{
 <script>
 const API="https://api.github.com";
 const token="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";  // CHANGE: Your classic Personal Access Token
-const githubUsername="authorization-tech"; // CHANGE: Your actual GitHub username
+let myGitHubUsername = "authorization-tech"; // Will be populated from API
 
 const log=m=>document.getElementById("log").textContent=
   typeof m==="string"?m:JSON.stringify(m,null,2);
 
 // auto redirect
-window.onload=()=>{
+window.onload=async ()=>{
   if(localStorage.getItem("authUser") && localStorage.getItem("authRepo")){
     location.href="home.html";
   }
+  
+  // Try to get GitHub username from token
+  try {
+    const userData = await api("/user");
+    myGitHubUsername = userData.login;
+    log(`Connected as: ${myGitHubUsername}`);
+  } catch (e) {
+    log(`Token issue: ${e.message || 'Check your token'}`);
+  }
 };
 
-// UPDATED FOR CLASSIC PAT - Uses "token" not "Bearer"
+// CORRECT API FUNCTION FOR CLASSIC PAT
 async function api(path,method="GET",body){
-  const res=await fetch(API+path,{
-    method,
-    headers:{
-      Authorization:"token "+token,  // CHANGED: "token" for classic PAT
-      Accept:"application/vnd.github+json",
-      "Content-Type":"application/json"
-    },
-    body:body?JSON.stringify(body):null
-  });
-  const data=await res.json();
-  if(!res.ok) {
-    log(`Error ${res.status}: ${data.message || 'Unknown error'}`);
-    throw data;
+  try {
+    const res=await fetch(API+path,{
+      method,
+      headers:{
+        Authorization:"token "+token,  // Classic PAT uses "token"
+        Accept:"application/vnd.github+json",
+        "X-GitHub-Api-Version":"2022-11-28",  // ADD THIS
+        "Content-Type":"application/json"
+      },
+      body:body?JSON.stringify(body):null
+    });
+    
+    console.log(`API ${method} ${path}: ${res.status}`);
+    
+    const data=await res.json();
+    
+    if(!res.ok) {
+      console.error("API Error:", data);
+      throw new Error(data.message || `HTTP ${res.status}`);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("API call failed:", error);
+    throw error;
   }
-  return data;
 }
 
 // tabs
@@ -199,41 +219,63 @@ async function signUp(){
   const p=suPassword.value.trim();
   if(!u||!p) return log("Username & password required");
   if(!cropper) return log("Select profile picture");
+  if(!myGitHubUsername) return log("Please wait, connecting to GitHub...");
 
   try{
     log("Creating account...");
     
-    const repos=await api("/user/repos?per_page=100");
+    // Get all repos to find next number
+    const repos=await api("/user/repos?per_page=100&type=owner");
     const nums=repos.map(r=>r.name)
       .filter(n=>/^user\d+$/.test(n))
       .map(n=>+n.replace("user",""));
     const repoName="user"+((Math.max(0,...nums))+1);
     
     log(`Creating repository: ${repoName}`);
-    await api("/user/repos","POST",{name:repoName,private:true});
+    
+    // Create repo under authenticated user
+    await api("/user/repos","POST",{
+      name:repoName,
+      private:true,
+      auto_init:false
+    });
     
     log("Saving username...");
-    await api(`/repos/${githubUsername}/${repoName}/contents/username.txt`,
-      "PUT",{message:"username",content:btoa(u)});
+    // Use authenticated user's repos (not githubUsername variable)
+    await api(`/repos/${myGitHubUsername}/${repoName}/contents/username.txt`,
+      "PUT",{
+        message:"username",
+        content:btoa(u),
+        branch:"main"
+      });
     
     log("Saving password...");
-    await api(`/repos/${githubUsername}/${repoName}/contents/password.txt`,
-      "PUT",{message:"password",content:btoa(p)});
+    await api(`/repos/${myGitHubUsername}/${repoName}/contents/password.txt`,
+      "PUT",{
+        message:"password",
+        content:btoa(p),
+        branch:"main"
+      });
 
     const blob=await getBlob();
     const reader=new FileReader();
     reader.onload=async e=>{
       log("Uploading profile picture...");
-      await api(`/repos/${githubUsername}/${repoName}/contents/profile.jpg`,
-        "PUT",{message:"profile",content:e.target.result.split(",")[1]});
+      await api(`/repos/${myGitHubUsername}/${repoName}/contents/profile.jpg`,
+        "PUT",{
+          message:"profile",
+          content:e.target.result.split(",")[1],
+          branch:"main"
+        });
       localStorage.setItem("authUser",u);
       localStorage.setItem("authRepo",repoName);
+      localStorage.setItem("repoOwner",myGitHubUsername);
       location.href="home.html";
     };
     reader.readAsDataURL(blob);
   }catch(e){
-    log(`Signup failed: ${e.message || 'Unknown error'}`);
-    console.error(e);
+    log(`Signup failed: ${e.message}`);
+    console.error("Signup error:", e);
   }
 }
 
@@ -242,30 +284,60 @@ async function logIn(){
   const u=liUsername.value.trim();
   const p=liPassword.value.trim();
   if(!u||!p) return log("Username & password required");
+  if(!myGitHubUsername) return log("Please wait, connecting to GitHub...");
 
   try{
     log("Checking credentials...");
-    const repos=await api("/user/repos?per_page=100");
+    
+    // Get all repos for authenticated user
+    const repos=await api("/user/repos?per_page=100&type=owner");
+    
     for(const r of repos){
       if(!/^user\d+$/.test(r.name)) continue;
+      
       try{
-        const uf=await api(`/repos/${githubUsername}/${r.name}/contents/username.txt`);
-        const pf=await api(`/repos/${githubUsername}/${r.name}/contents/password.txt`);
+        // Try to get user/password files from THIS repo
+        const uf=await api(`/repos/${r.owner.login}/${r.name}/contents/username.txt`);
+        const pf=await api(`/repos/${r.owner.login}/${r.name}/contents/password.txt`);
+        
         if(atob(uf.content)===u && atob(pf.content)===p){
+          log(`Login successful! Welcome ${u}`);
           localStorage.setItem("authUser",u);
           localStorage.setItem("authRepo",r.name);
-          location.href="home.html";
+          localStorage.setItem("repoOwner",r.owner.login);
+          
+          setTimeout(()=>{
+            location.href="home.html";
+          },500);
           return;
         }
-      }catch(e){
-        // Skip repos that don't have the required files
+      }catch(fileErr){
+        // This repo doesn't have the files, skip it
         continue;
       }
     }
     log("Invalid credentials - no matching account found");
   }catch(e){
-    log(`Login failed: ${e.message || 'Unknown error'}`);
-    console.error(e);
+    log(`Login failed: ${e.message}`);
+    console.error("Login error:", e);
+  }
+}
+
+// TEST FUNCTION - Run this in console to debug
+window.testToken = async function() {
+  console.log("Testing token...");
+  try {
+    const user = await api("/user");
+    console.log("✅ Token valid! User:", user.login);
+    console.log("✅ Repo creation test...");
+    
+    const repos = await api("/user/repos?per_page=5");
+    console.log("✅ Can list repos. Count:", repos.length);
+    
+    return true;
+  } catch (e) {
+    console.error("❌ Token test failed:", e.message);
+    return false;
   }
 }
 </script>
