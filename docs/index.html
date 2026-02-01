@@ -1,54 +1,172 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>sharetalk/home</title>
-  <link rel="stylesheet" href="style.css">
+  <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+  <link rel="manifest" href="manifest.json">
+  <title>VIBRYX/Auth</title>
+  <link rel="stylesheet" href="auth.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <!-- Add Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
 </head>
 <body>
-
-<nav id="navbar" class="navbar">
-  <div class="app-bar">
-    <div class="top-logos">
-      <span class="title">sharetalk</span>
-      <button class="search" id="search">&#x2315</button>
-      <a href="more.html" target="_blank">
-        <button class="more">☰</button>
-      </a>
+  <!-- Terms and Conditions Popup for Signup -->
+  <div id="termsPopup" class="popup-overlay" style="display: none;">
+    <div class="popup-content">
+      <div class="terms-text">
+        <h2>VIBRYX – Terms & Conditions</h2>
+        <p>Welcome to VIBRYX. By accessing or using this app, you agree to comply with the following Terms & Conditions. If you do not agree, please do not use VIBRYX.</p>
+        
+        <h3>1. Acceptance of Terms</h3>
+        <p>By using VIBRYX, you confirm that you have read, understood, and agreed to these Terms.</p>
+        
+        <h3>2. Eligibility</h3>
+        <p>You must be at least 13 years old to use this app.</p>
+        
+        <h3>3. Nature of Content</h3>
+        <p>Music available on VIBRYX is AI-generated or legally licensed.</p>
+        <p>All content is protected under applicable copyright and intellectual property laws.</p>
+        
+        <h3>4. No Copying, No Downloading (VERY IMPORTANT)</h3>
+        <p>Users are strictly prohibited from:</p>
+        <ul>
+          <li>Copying</li>
+          <li>Recording</li>
+          <li>Downloading</li>
+          <li>Redistributing</li>
+          <li>Modifying</li>
+        </ul>
+        <p>any audio content from VIBRYX without authorization.</p>
+        <p>Downloading music is allowed ONLY after a valid purchase or license.</p>
+        <p>Unauthorized copying or downloading is illegal and may result in legal action.</p>
+        
+        <h3>5. Purchase & License</h3>
+        <p>When you purchase a song, you receive a limited license for personal use only.</p>
+        <p>Purchased content cannot be resold, shared, or uploaded elsewhere.</p>
+        
+        <h3>6. User Responsibility</h3>
+        <p>Users are solely responsible for:</p>
+        <ul>
+          <li>How they use the content</li>
+          <li>Any legal consequences arising from misuse of audio or app features</li>
+        </ul>
+        
+        <h3>7. Prohibited Activities</h3>
+        <p>Users must not:</p>
+        <ul>
+          <li>Attempt to bypass security or DRM</li>
+          <li>Use screen/audio recording tools to capture music</li>
+          <li>Hack, scrape, or misuse the platform</li>
+          <li>Use content for illegal or commercial purposes without permission</li>
+        </ul>
+        
+        <h3>8. Account Suspension & Termination</h3>
+        <p>VIBRYX reserves the right to:</p>
+        <ul>
+          <li>Suspend or terminate accounts</li>
+          <li>Remove access without notice</li>
+        </ul>
+        <p>if these terms are violated.</p>
+        
+        <h3>9. Limitation of Liability</h3>
+        <p>VIBRYX is not responsible for:</p>
+        <ul>
+          <li>User misuse of content</li>
+          <li>Legal issues caused by unauthorized downloading or sharing</li>
+        </ul>
+        
+        <h3>10. Changes to Terms</h3>
+        <p>We may update these Terms at any time. Continued use means acceptance of the updated Terms.</p>
+        
+        <h3>11. Contact</h3>
+        <p>For legal or support inquiries:</p>
+        <p>📧 privacy@vibryx.app</p>
+        
+        <hr>
+        
+        <h2>VIBRYX – Privacy Policy</h2>
+        <p><strong>Last Updated: January 2026</strong></p>
+        <p>Your privacy matters to VIBRYX.</p>
+        
+        <h3>1. Information We Collect</h3>
+        <p>We may collect:</p>
+        <ul>
+          <li>Name and email</li>
+          <li>Account login details</li>
+          <li>Usage data (plays, likes, purchases)</li>
+          <li>Uploaded or generated content (if applicable)</li>
+        </ul>
+        
+        <h3>2. How We Use Information</h3>
+        <p>We use data to:</p>
+        <ul>
+          <li>Provide music streaming services</li>
+          <li>Process purchases</li>
+          <li>Improve app performance and security</li>
+          <li>Prevent misuse and fraud</li>
+        </ul>
+        
+        <h3>3. Data Sharing</h3>
+        <p>We do not sell personal data.</p>
+        <p>Data may be shared only when legally required.</p>
+        
+        <h3>4. Data Security</h3>
+        <p>We use reasonable technical measures to protect user data, but no system is completely secure.</p>
+        
+        <h3>5. User Rights</h3>
+        <p>Users may request:</p>
+        <ul>
+          <li>Account deletion</li>
+          <li>Personal data removal</li>
+        </ul>
+        
+        <h3>6. Children's Privacy</h3>
+        <p>VIBRYX is not intended for children under 13.</p>
+        
+        <h3>7. Policy Updates</h3>
+        <p>We may update this Privacy Policy periodically.</p>
+        
+        <h3>8. Contact</h3>
+        <p>For privacy concerns:</p>
+        <p><a>📧 privacy@vibryx.app</a></p>
+      </div>
+      <div class="terms-agreement">
+        <label style="color: white; font-size: 20px;">
+          <input type="checkbox" id="agreeCheckbox">
+          I have read, understood, and agree to the Terms & Conditions and Privacy Policy
+        </label>
+        <button id="acceptTermsBtn" class="btn2" disabled>Accept & Continue</button>
+        <button id="declineTermsBtn" class="btn">Decline</button>
+      </div>
     </div>
   </div>
 
-  <nav class="sec-nav">
-    <div class="home-icon"></div>
-
-    <div class="badge" id="badge">
-  <!-- Bell icon -->
-  <svg viewBox="0 0 24 24">
-    <path d="M12 3c-3 0-5 2.5-5 5.5v2.2c0 .7-.3 1.4-.8 1.9l-1.2 1.2c-.5.5-.2 1.2.5 1.2h15c.7 0 1-.8.5-1.2l-1.2-1.2c-.5-.5-.8-1.2-.8-1.9V8.5C17 5.5 15 3 12 3z"/>
-    <path d="M9.5 18c.5 1.2 1.7 2 3 2s2.5-.8 3-2" stroke-linecap="round"/>
-  </svg>
-  <!-- Notification count -->
-</div>
-
-    <button class="add" id="add">+</button>
-
-    <div class="friends-icon">
-      <div></div><div></div><div></div><div></div>
+  <!-- Main Content -->
+  <center class="gap"><span class="head">VIBRYX</span></center>
+  <center> 
+  <form class="box" id="authForm">
+    <input type="email" class="inp" id="emailInput" placeholder="E-Mail..." required>
+    <div style="position: relative; width: 80%; margin: 100px auto 0;">
+      <input type="password" class="inp" id="passwordInput" placeholder="Password..." required style="width: 100%;">
+      <span id="togglePassword" class="fa-solid fa-eye" style="position: absolute; right: 15px; top: 30%; transform: translateY(-50%); cursor: pointer; font-size: 30px; color: #666; margin-bottom: 20px;"></span>
     </div>
-
-    <div class="profile-icon" id="profile">
-      <div></div><div></div>
+    <p><br><br>
+    <button type="button" class="btn" id="loginBtn">Log In</button>
+    <div id="errorMessage" style="color: red; font-size: 30px; margin-top: 30px; display: none; font-weight: 900; background: white;"></div>
+    <div style="margin-top: 8vh;">
+      <h4 style="color: white; font-size: 30px; font-weight: 900;">Don't have any account? Sign Up to create.</h4>
+      <button type="button" class="btn2" id="signupBtn">Sign Up</button>
     </div>
-  </nav>
-</nav>
-
-<main class="content">
-  <center class="see">Enjoy sharetalk...</center>
-
-  <!-- HOME FEED -->
-  <div id="feed"></div>
-</main>
-
-<script src="script.js"></script>
+  </form>
+</center>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="auth.js"></script>
+    <script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/service-worker.js")
+    .then(() => console.log("SW registered"));
+}
+</script>
 </body>
 </html>
