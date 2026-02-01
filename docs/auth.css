@@ -1,0 +1,185 @@
+body {
+    background: url("ab.jpg") center / cover no-repeat;
+    overflow: hidden;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+}
+
+.head {
+    color: white;
+    font-weight: 900;
+    font-family: serif;
+    font-size: 80px;
+}
+
+.gap {
+    margin-top: 5vh;
+}
+
+.inp {
+    width: 80%;
+    text-align: center;
+    font-size: 30px;
+    color: black;
+    border: 2px solid white;
+    margin-top: 100px;
+    border-radius: 15px;
+    font-weight: 900;
+    height: 5vh;
+}
+
+.box {
+    margin-top: 60px;
+    background: black;
+    border: 2px solid white;
+    border-radius: 30px;
+    height: auto;
+    box-shadow: 10px 10px 50px white;
+    width: 80%;
+}
+
+.btn {
+    border-radius: 20px;
+    margin-top: 20px;
+    height: 5vh;
+    background: darkorange;
+    color: white;
+    box-shadow: 10px 20px 50px white;
+    border: 2px solid white;
+    width: 50%;
+    font-size: 40px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.btn:hover {
+    background: #ff8c00;
+}
+
+.btn:disabled {
+    background: #666;
+    cursor: not-allowed;
+}
+
+.btn2 {
+    border-radius: 20px;
+    margin-top: 10px;
+    height: 5vh;
+    background: #3abe10;
+    color: white;
+    box-shadow: 10px 20px 50px white;
+    border: 2px solid white;
+    width: 50%;
+    margin-bottom: 15vh;
+    font-size: 40px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.btn2:hover {
+    background: #32a50d;
+}
+
+.btn2:disabled {
+    background: #666;
+    cursor: not-allowed;
+}
+
+/* Terms and Conditions Popup Styles */
+.popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+.popup-content {
+    background: #1a1a1a;
+    margin: 50px auto;
+    padding: 30px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    border: 2px solid white;
+    box-shadow: 0 0 50px rgba(255, 255, 255, 0.2);
+}
+
+.terms-text {
+    color: white;
+    font-size: 16px;
+    line-height: 1.6;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 20px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    margin-bottom: 30px;
+}
+
+.terms-text h2 {
+    color: #3abe10;
+    font-size: 28px;
+    margin-top: 20px;
+}
+
+.terms-text h3 {
+    color: darkorange;
+    font-size: 20px;
+    margin-top: 15px;
+}
+
+.terms-text ul {
+    margin-left: 20px;
+}
+
+.terms-agreement {
+    text-align: center;
+    padding: 20px;
+    background: #2a2a2a;
+    border-radius: 10px;
+}
+
+.terms-agreement label {
+    display: block;
+    margin-bottom: 20px;
+    cursor: pointer;
+}
+
+.terms-agreement input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+/* Add to your auth.css */
+.password-container {
+  position: relative;
+  width: 80%;
+  margin: 100px auto 0;
+}
+
+.password-container .inp {
+  width: 100%;
+  padding-right: 40px; /* Space for eye icon */
+}
+
+.toggle-password {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 20px;
+  color: #666;
+  user-select: none;
+}
+
+.toggle-password:hover {
+  color: darkorange;
+}
