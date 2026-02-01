@@ -1,273 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>sharetalk/auth</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" rel="stylesheet"/>
-<style>
-body{
-  font-family: system-ui,-apple-system;
-  background:#f0f2f5;
-  display:flex;
-  justify-content:center;
-  padding:20px;
-}
-.card{
-  background:#fff;
-  padding:20px;
-  border-radius:16px;
-  width:100%;
-  max-width:400px;
-  box-shadow:0 10px 25px rgba(0,0,0,.2);
-}
-h2{text-align:center;margin-bottom:20px;}
-input,button{
-  width:100%;
-  padding:10px;
-  margin-top:10px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  font-size:14px;
-}
-button{
-  cursor:pointer;
-  border:none;
-  color:white;
-  font-weight:600;
-}
-button.signup{background:#238636;}
-button.login{background:#1877f2;}
-#avatarPreview{
-  width:120px;
-  height:120px;
-  border-radius:50%;
-  object-fit:cover;
-  display:block;
-  margin:10px auto;
-  border:2px solid #1f6feb;
-}
-.tab-btns{
-  display:flex;
-  gap:10px;
-  margin-bottom:10px;
-}
-.tab-btns button{
-  flex:1;
-  background:#ddd;
-  color:black;
-  font-weight:500;
-}
-.tab-btns button.active{
-  background:#1f6feb;
-  color:white;
-}
-#choosePicBtn{
-  background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);
-}
-pre{
-  background:#eee;
-  padding:10px;
-  border-radius:8px;
-  margin-top:10px;
-}
-</style>
+  <meta charset="UTF-8">
+  <title>VIBRYX/Home</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 </head>
-
 <body>
-<div class="card">
-  <div class="tab-btns">
-    <button id="tabSignup" class="active">Sign Up</button>
-    <button id="tabLogin">Login</button>
+  <nav class="app-bar">
+     <button id="music-tab" class="app-tab active-tab"><i class="fa-solid fa-music fa-2x"></i></button>
+     <button id="images-tab" onclick="location.href='photo.html'"class="app-tab"><i class="fa-solid fa-book fa-2x"></i></button>
+  </nav>
+ <!-- Bottom App Bar -->
+<nav class="bottom-bar">
+  <div class="nav-item" id="do">
+    <i class="fa-solid fa-house fa-2x" id="do"></i>
+    <span>Home</span>
   </div>
-
-  <div id="signupForm">
-    <h2>Sign Up</h2>
-    <input id="suUsername" placeholder="Username">
-    <input id="suPassword" type="password" placeholder="Password">
-
-    <input type="file" id="profilePicInput" accept="image/*" hidden>
-    <button type="button" id="choosePicBtn">Choose Profile Picture</button>
-
-    <canvas id="avatarPreview"></canvas>
-    <img id="cropImg" hidden>
-
-    <button class="signup" onclick="signUp()">Sign Up</button>
+  <div class="nav-item">
+    <i class="fa-solid fa-crown fa-2x" onclick="location.href='alert.html'"></i>
+    <span>Premium</span>
   </div>
-
-  <div id="loginForm" style="display:none">
-    <h2>Login</h2>
-    <input id="liUsername" placeholder="Username">
-    <input id="liPassword" type="password" placeholder="Password">
-    <button class="login" onclick="logIn()">Login</button>
+  <div class="nav-item">
+    <i class="fa-solid fa-search fa-2x" onclick="location.href='search.html'"></i>
+    <span>Search</span>
   </div>
-
-  <pre id="log"></pre>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
-<script>
-const API="https://api.github.com";
-const token="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";  // CHANGE: Your classic Personal Access Token
-const githubUsername="authorization-tech"; // CHANGE: Your actual GitHub username
-
-const log=m=>document.getElementById("log").textContent=
-  typeof m==="string"?m:JSON.stringify(m,null,2);
-
-// auto redirect
-window.onload=()=>{
-  if(localStorage.getItem("authUser") && localStorage.getItem("authRepo")){
-    location.href="home.html";
-  }
-};
-
-// UPDATED FOR CLASSIC PAT - Uses "token" not "Bearer"
-async function api(path,method="GET",body){
-  const res=await fetch(API+path,{
-    method,
-    headers:{
-      Authorization:"token "+token,  // CHANGED: "token" for classic PAT
-      Accept:"application/vnd.github+json",
-      "Content-Type":"application/json"
-    },
-    body:body?JSON.stringify(body):null
-  });
-  const data=await res.json();
-  if(!res.ok) {
-    log(`Error ${res.status}: ${data.message || 'Unknown error'}`);
-    throw data;
-  }
-  return data;
-}
-
-// tabs
-tabSignup.onclick=()=>{
-  signupForm.style.display="block";
-  loginForm.style.display="none";
-  tabSignup.classList.add("active");
-  tabLogin.classList.remove("active");
-};
-tabLogin.onclick=()=>{
-  signupForm.style.display="none";
-  loginForm.style.display="block";
-  tabLogin.classList.add("active");
-  tabSignup.classList.remove("active");
-};
-
-// cropper
-let cropper;
-choosePicBtn.onclick=()=>profilePicInput.click();
-
-profilePicInput.onchange=e=>{
-  const file=e.target.files[0];
-  if(!file) return;
-  cropImg.src=URL.createObjectURL(file);
-  cropImg.onload=()=>{
-    if(cropper) cropper.destroy();
-    cropper=new Cropper(cropImg,{
-      aspectRatio:1,
-      autoCropArea:1,
-      crop:updatePreview
-    });
-  };
-};
-
-function updatePreview(){
-  const c=cropper.getCroppedCanvas({width:200,height:200});
-  avatarPreview.width=120;
-  avatarPreview.height=120;
-  const ctx=avatarPreview.getContext("2d");
-  ctx.clearRect(0,0,120,120);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(60,60,60,0,Math.PI*2);
-  ctx.clip();
-  ctx.drawImage(c,0,0,120,120);
-  ctx.restore();
-}
-
-function getBlob(){
-  return new Promise(r=>{
-    cropper.getCroppedCanvas({width:200,height:200})
-    .toBlob(b=>r(b),"image/jpeg",0.8);
-  });
-}
-
-// signup
-async function signUp(){
-  const u=suUsername.value.trim();
-  const p=suPassword.value.trim();
-  if(!u||!p) return log("Username & password required");
-  if(!cropper) return log("Select profile picture");
-
-  try{
-    log("Creating account...");
-    
-    const repos=await api("/user/repos?per_page=100");
-    const nums=repos.map(r=>r.name)
-      .filter(n=>/^user\d+$/.test(n))
-      .map(n=>+n.replace("user",""));
-    const repoName="user"+((Math.max(0,...nums))+1);
-    
-    log(`Creating repository: ${repoName}`);
-    await api("/user/repos","POST",{name:repoName,private:true});
-    
-    log("Saving username...");
-    await api(`/repos/${githubUsername}/${repoName}/contents/username.txt`,
-      "PUT",{message:"username",content:btoa(u)});
-    
-    log("Saving password...");
-    await api(`/repos/${githubUsername}/${repoName}/contents/password.txt`,
-      "PUT",{message:"password",content:btoa(p)});
-
-    const blob=await getBlob();
-    const reader=new FileReader();
-    reader.onload=async e=>{
-      log("Uploading profile picture...");
-      await api(`/repos/${githubUsername}/${repoName}/contents/profile.jpg`,
-        "PUT",{message:"profile",content:e.target.result.split(",")[1]});
-      localStorage.setItem("authUser",u);
-      localStorage.setItem("authRepo",repoName);
-      location.href="home.html";
-    };
-    reader.readAsDataURL(blob);
-  }catch(e){
-    log(`Signup failed: ${e.message || 'Unknown error'}`);
-    console.error(e);
-  }
-}
-
-// login
-async function logIn(){
-  const u=liUsername.value.trim();
-  const p=liPassword.value.trim();
-  if(!u||!p) return log("Username & password required");
-
-  try{
-    log("Checking credentials...");
-    const repos=await api("/user/repos?per_page=100");
-    for(const r of repos){
-      if(!/^user\d+$/.test(r.name)) continue;
-      try{
-        const uf=await api(`/repos/${githubUsername}/${r.name}/contents/username.txt`);
-        const pf=await api(`/repos/${githubUsername}/${r.name}/contents/password.txt`);
-        if(atob(uf.content)===u && atob(pf.content)===p){
-          localStorage.setItem("authUser",u);
-          localStorage.setItem("authRepo",r.name);
-          location.href="home.html";
-          return;
-        }
-      }catch(e){
-        // Skip repos that don't have the required files
-        continue;
-      }
-    }
-    log("Invalid credentials - no matching account found");
-  }catch(e){
-    log(`Login failed: ${e.message || 'Unknown error'}`);
-    console.error(e);
-  }
-}
-</script>
+ <div class="nav-item">
+    <i class="fa-solid fa-question fa-2x" onclick="location.href='about.html'"></i>
+    <span>About</span>
+  </div>
+ <div class="nav-item">
+    <i class="fa-solid fa-bars fa-2x" onclick="location.href='more.html'"></i>
+    <span>Library</span>
+  </div>
+</nav>
+  
+<script src="app.js"></script>
 </body>
 </html>
