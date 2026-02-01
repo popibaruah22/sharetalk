@@ -1,32 +1,27 @@
-const CACHE_NAME = 'sharetalk-cache-v1';
-
-// Install: take control immediately
+// Simple auto-cache service worker, no versioning
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  self.skipWaiting(); // take control immediately
 });
 
-// Activate: claim clients and clean old caches
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  self.clients.claim(); // control all pages
 });
 
-// Fetch: network-first, then cache, fallback to offline
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         // clone response and store in cache
         const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
+        caches.open('sharetalk-cache').then((cache) => {
           cache.put(event.request, responseClone);
         });
         return response;
       })
       .catch(() => {
-        // if network fails, return from cache
+        // if network fails, serve from cache
         return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          return new Response('Offline'); // fallback if nothing cached
+          return cachedResponse || new Response('Offline');
         });
       })
   );
