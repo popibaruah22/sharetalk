@@ -8,8 +8,7 @@
 }
 
 html, body {
-    height: 100%;
-    overflow: hidden;
+    height: 110vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #000;
     color: #fff;
