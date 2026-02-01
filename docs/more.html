@@ -7,14 +7,27 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 </head>
 <body>
+  <button class="back" onclick="location.href='home.html'">Move To Home</button>
+  <div class="fl">
+  <img class="logo"src="lib.png">
+    <h1><i>VIBRYX</i></h1>
+    </div>
   <main>
     <h1>Download our more apps and vist the webs.</h1>
+  <button id="pwaInstallBtn" style="display:;">
+  ⬇️ Download App
+</button>
+
+<p id="pwaInstallStatus"></p>
+
+<script src="more.js"></script>
   </main>
   <!-- Bottom App Bar -->
 <nav class="bottom-bar">
   <div class="nav-item" id="do">
-    <i class="fa-solid fa-house fa-2x" onclick="location.href='home.html'"></i>
+    <i class="fa-solid fa-house fa-2x" id="do"></i>
   </div>
 </nav>
+  <script src="more.js"></script>
 </body>
 </html>
