@@ -101,6 +101,7 @@ html, body {
     width: 50vh;
     height: 50vh;
     margin: 20px auto;
+   margin-right: 20px;
 }
 
 .album-art {
