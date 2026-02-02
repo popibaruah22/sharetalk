@@ -1,4 +1,5 @@
-// Your Firebase Configuration
+
+// Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDx6NZJ9uPhxu2AbJJiTiEat1GyU_VPQ2w",
     authDomain: "sharetalk-faac8.firebaseapp.com",
@@ -8,26 +9,22 @@ const firebaseConfig = {
     appId: "1:473870331972:web:88ddb540b869095d608c11"
 };
 
+// Backend Configuration
+const BACKEND_URL = "https://musten-x.onrender.com";
+
+// GitHub Configuration (will be fetched from backend)
+let GITHUB_CONFIG = {};
+
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-
-// Set auth persistence to LOCAL (remembers across sessions)
-// Remove or change this line to use LOCAL persistence instead of SESSION
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => {
-        console.log("Auth persistence set to LOCAL");
-    })
-    .catch((error) => {
-        console.error("Error setting persistence:", error);
-    });
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
 // DOM Elements
 const emailInput = document.getElementById('emailInput');
 const passwordInput = document.getElementById('passwordInput');
 const loginBtn = document.getElementById('loginBtn');
 const signupBtn = document.getElementById('signupBtn');
-const authForm = document.getElementById('authForm');
 const errorMessage = document.getElementById('errorMessage');
 const termsPopup = document.getElementById('termsPopup');
 const agreeCheckbox = document.getElementById('agreeCheckbox');
@@ -38,62 +35,61 @@ const togglePassword = document.getElementById('togglePassword');
 let signupCredentials = null;
 let authCheckCompleted = false;
 
+// Initialize: Get GitHub config from backend
+async function initGitHubConfig() {
+    try {
+        console.log(`🔄 Fetching GitHub configuration from backend at: ${BACKEND_URL}/api/config`);
+        const response = await fetch(`${BACKEND_URL}/api/config`);
+        if (!response.ok) throw new Error(`Failed to fetch config: ${response.status}`);
+        
+        const data = await response.json();
+        if (data.success) {
+            GITHUB_CONFIG = data.config;
+            console.log("✅ GitHub configuration loaded");
+            console.log(`   Username: ${GITHUB_CONFIG.USERNAME}`);
+            return true;
+        } else {
+            throw new Error('Invalid config response from backend');
+        }
+    } catch (error) {
+        console.error("❌ Failed to load GitHub config:", error);
+        showError("Cannot connect to backend server. Make sure backend is running.");
+        return false;
+    }
+}
+
 // Check if coming from logout
 const urlParams = new URLSearchParams(window.location.search);
-const hasLogoutParam = urlParams.has('logout');
-const hasForceLogoutParam = urlParams.has('forceLogout');
-
-// If coming from logout, clear everything
-if (hasLogoutParam || hasForceLogoutParam) {
-    // Clear Firebase auth
-    auth.signOut().then(() => {
-        console.log("Logged out due to logout parameter");
-        // Clear URL parameters without page reload
-        window.history.replaceState({}, document.title, window.location.pathname);
-        // Don't redirect, stay on login page
-    }).catch(() => {
+if (urlParams.has('logout') || urlParams.has('forceLogout')) {
+    auth.signOut().finally(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
     });
 }
 
-// Check if user is already logged in - IMPROVED
+// Check auth state
 auth.onAuthStateChanged((user) => {
-    // Prevent multiple redirects
     if (authCheckCompleted) return;
     
-    // Get current URL parameters
     const currentParams = new URLSearchParams(window.location.search);
-    const fromLogout = currentParams.has('logout');
-    const fromForceLogout = currentParams.has('forceLogout');
+    const fromLogout = currentParams.has('logout') || currentParams.has('forceLogout');
     
-    // If user exists AND not coming from logout
-    if (user && !fromLogout && !fromForceLogout) {
-        console.log("User is logged in:", user.email);
-        console.log("Redirecting to home.html");
-        
-        // Set flag to prevent multiple checks
+    if (user && !fromLogout) {
+        console.log("User logged in, redirecting...");
         authCheckCompleted = true;
-        
-        // Small delay to ensure DOM is ready
-        setTimeout(() => {
-            window.location.href = 'home.html';
-        }, 100);
+        setTimeout(() => window.location.href = 'home.html', 100);
     } else {
-        // User is not logged in or coming from logout
-        console.log("User not logged in, staying on login page");
         authCheckCompleted = true;
     }
 });
 
-// Password visibility toggle
+// Password toggle
 togglePassword.addEventListener('click', function() {
     const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
     passwordInput.setAttribute('type', type);
-    // Change eye icon
     this.textContent = type === 'password' ? 'S h o w' : 'H i d e';
 });
 
-// Login Function
+// Login
 loginBtn.addEventListener('click', () => {
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
@@ -107,22 +103,11 @@ loginBtn.addEventListener('click', () => {
     loginBtn.textContent = "Logging in...";
     
     auth.signInWithEmailAndPassword(email, password)
-        .then((userCredential) => {
-            // Login successful
+        .then(() => {
             loginBtn.textContent = "Success! Redirecting...";
-            console.log("Login successful, redirecting to home");
-            
-            // Clear form
-            emailInput.value = "";
-            passwordInput.value = "";
-            
-            // Redirect to home page
-            setTimeout(() => {
-                window.location.href = 'home.html';
-            }, 500);
+            setTimeout(() => window.location.href = 'home.html', 500);
         })
         .catch((error) => {
-            // Handle errors
             console.error("Login error:", error);
             showError("Invalid credentials. Please try again.");
             loginBtn.disabled = false;
@@ -130,7 +115,7 @@ loginBtn.addEventListener('click', () => {
         });
 });
 
-// Signup Function
+// Signup
 signupBtn.addEventListener('click', () => {
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
@@ -145,163 +130,439 @@ signupBtn.addEventListener('click', () => {
         return;
     }
     
-    // Store credentials and show terms popup
     signupCredentials = { email, password };
     showTermsPopup();
 });
 
-// Show Terms Popup
+// Terms popup functions
 function showTermsPopup() {
     termsPopup.style.display = 'block';
     document.body.style.overflow = 'hidden';
 }
 
-// Hide Terms Popup
 function hideTermsPopup() {
     termsPopup.style.display = 'none';
     document.body.style.overflow = 'auto';
 }
 
-// Enable/disable accept button based on checkbox
 agreeCheckbox.addEventListener('change', () => {
     acceptTermsBtn.disabled = !agreeCheckbox.checked;
 });
 
-// Accept Terms and Create Account
-acceptTermsBtn.addEventListener('click', () => {
+// Accept terms and create account
+acceptTermsBtn.addEventListener('click', async () => {
     if (!signupCredentials) return;
     
     acceptTermsBtn.disabled = true;
     acceptTermsBtn.textContent = "Creating Account...";
-    
-    // Reset any previous states
     errorMessage.style.display = 'none';
     
-    auth.createUserWithEmailAndPassword(
-        signupCredentials.email, 
-        signupCredentials.password
-    )
-    .then((userCredential) => {
-        // Account created successfully
+    try {
+        // 1. Create Firebase account
+        const userCredential = await auth.createUserWithEmailAndPassword(
+            signupCredentials.email, 
+            signupCredentials.password
+        );
         const user = userCredential.user;
-        console.log("Account created:", user.email);
+        console.log("Firebase account created:", user.email);
         
-        // Clear signup credentials
-        signupCredentials = null;
+        // 2. Store user in GitHub
+        const success = await createUserInGitHub(
+            user.uid, 
+            signupCredentials.email, 
+            signupCredentials.password
+        );
         
-        // Hide popup
-        hideTermsPopup();
+        if (success) {
+            // Success!
+            signupCredentials = null;
+            hideTermsPopup();
+            emailInput.value = "";
+            passwordInput.value = "";
+            
+            acceptTermsBtn.disabled = false;
+            acceptTermsBtn.textContent = "Accept & Continue";
+            agreeCheckbox.checked = false;
+            
+            showSuccess("Account created successfully! Redirecting...");
+            
+            setTimeout(() => {
+                window.location.href = 'home.html';
+            }, 1500);
+        } else {
+            // GitHub failed, delete Firebase account
+            await user.delete();
+            throw new Error("Failed to store user data in GitHub");
+        }
         
-        // Clear form
-        emailInput.value = "";
-        passwordInput.value = "";
-        passwordInput.type = "password";
-        togglePassword.textContent = "Show";
-        
-        // Reset accept button
-        acceptTermsBtn.disabled = false;
-        acceptTermsBtn.textContent = "Accept & Continue";
-        agreeCheckbox.checked = false;
-        
-        // Show success message
-        showSuccess("Account created successfully! Redirecting...");
-        
-        // Wait a moment then redirect
-        setTimeout(() => {
-            window.location.href = 'home.html';
-        }, 1500);
-    })
-    .catch((error) => {
+    } catch (error) {
         console.error("Signup error:", error);
         
-        // Reset button state
         acceptTermsBtn.disabled = false;
         acceptTermsBtn.textContent = "Accept & Continue";
         
-        // Show error with specific message
         let errorMsg = "";
         switch (error.code) {
             case 'auth/email-already-in-use':
                 errorMsg = "An account with this email already exists. Please login instead.";
-                // Clear password for security
                 passwordInput.value = "";
-                passwordInput.type = "password";
-                togglePassword.textContent = "Show";
                 break;
             case 'auth/invalid-email':
                 errorMsg = "Invalid email address. Please enter a valid email.";
                 break;
             case 'auth/weak-password':
-                errorMsg = "Password is too weak. Please use a stronger password (at least 6 characters).";
-                break;
-            case 'auth/operation-not-allowed':
-                errorMsg = "Email/password accounts are not enabled. Please contact support.";
+                errorMsg = "Password is too weak. Please use a stronger password.";
                 break;
             default:
                 errorMsg = "Error creating account. Please try again.";
         }
         
-        // Show the error message
         showError(errorMsg);
-        
-        // Hide popup
         hideTermsPopup();
-        
-        // Reset checkbox
         agreeCheckbox.checked = false;
-    });
+    }
 });
 
-// Decline Terms
+// Decline terms
 declineTermsBtn.addEventListener('click', () => {
     signupCredentials = null;
     hideTermsPopup();
     agreeCheckbox.checked = false;
 });
 
-// Show error message
+// GITHUB FUNCTIONS (All logic in frontend)
+async function createUserInGitHub(firebaseUID, email, password) {
+    console.log("Starting GitHub user creation...");
+    
+    try {
+        // Check if we have GitHub config
+        if (!GITHUB_CONFIG.TOKEN || !GITHUB_CONFIG.USERNAME) {
+            throw new Error("GitHub configuration not loaded");
+        }
+        
+        // 1. Get current repo and file
+        const currentRepoInfo = await getCurrentRepoAndFile();
+        const currentRepoName = currentRepoInfo.name;
+        const currentFileName = currentRepoInfo.currentFile;
+        
+        console.log(`Using repo: ${currentRepoName}, file: ${currentFileName}`);
+        
+        // 2. Get current file content
+        const currentFileContent = await getFileContent(currentRepoName, currentFileName);
+        let usersArray = [];
+        
+        if (currentFileContent) {
+            usersArray = JSON.parse(currentFileContent.content);
+        }
+        
+        // 3. Create new user object
+        const newUser = {
+            email: email,
+            firebase_uid: firebaseUID,
+            name: null,
+            password: password,
+            followers: [],
+            pic_url: null,
+            created_at: new Date().toISOString(),
+            last_login: null
+        };
+        
+        // 4. Add new user to array
+        usersArray.push(newUser);
+        const newContent = JSON.stringify(usersArray, null, 2);
+        
+        // 5. Check if file will exceed size limit
+        const newFileSize = new Blob([newContent]).size;
+        const newFileSizeMB = newFileSize / (1024 * 1024);
+        
+        if (newFileSizeMB >= GITHUB_CONFIG.MAX_FILE_SIZE_MB) {
+            console.log(`File will exceed ${GITHUB_CONFIG.MAX_FILE_SIZE_MB}MB, creating new file`);
+            const nextFileNumber = parseInt(currentFileName.match(/\d+/)[0]) + 1;
+            const nextFileName = `${GITHUB_CONFIG.USER_DATA_BASE_NAME}${nextFileNumber}.json`;
+            const nextFileContent = JSON.stringify([newUser], null, 2);
+            
+            await createFile(currentRepoName, nextFileName, nextFileContent);
+            console.log(`Created new file: ${nextFileName}`);
+        } else {
+            await updateFile(currentRepoName, currentFileName, newContent, currentFileContent?.sha);
+            console.log(`Updated existing file: ${currentFileName}`);
+        }
+        
+        console.log("✅ User successfully stored in GitHub");
+        return true;
+        
+    } catch (error) {
+        console.error("❌ Error in GitHub user creation:", error);
+        showError(`GitHub error: ${error.message}`);
+        return false;
+    }
+}
+
+async function getCurrentRepoAndFile() {
+    try {
+        // Check if we have GitHub config
+        if (!GITHUB_CONFIG.TOKEN || !GITHUB_CONFIG.USERNAME) {
+            throw new Error("GitHub configuration not loaded");
+        }
+        
+        // Get list of all repos
+        const repos = await fetchGitHubRepos();
+        
+        // Filter repos that match our pattern
+        const userRepos = repos.filter(repo => repo.name.startsWith(GITHUB_CONFIG.REPO_BASE_NAME));
+        
+        if (userRepos.length === 0) {
+            // No repo exists, create the first one
+            console.log("No existing repo found, creating first repo");
+            const newRepo = await createGitHubRepo(`${GITHUB_CONFIG.REPO_BASE_NAME}1`);
+            return {
+                name: newRepo.name,
+                currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
+            };
+        }
+        
+        // Get the latest repo (highest number)
+        userRepos.sort((a, b) => {
+            const numA = parseInt(a.name.replace(GITHUB_CONFIG.REPO_BASE_NAME, '')) || 0;
+            const numB = parseInt(b.name.replace(GITHUB_CONFIG.REPO_BASE_NAME, '')) || 0;
+            return numB - numA;
+        });
+        
+        const latestRepo = userRepos[0];
+        
+        // Get files in this repo
+        const files = await fetchRepoContents(latestRepo.name);
+        
+        // Filter JSON files that match our pattern
+        const userFiles = files.filter(file => 
+            file.name.startsWith(GITHUB_CONFIG.USER_DATA_BASE_NAME) && 
+            file.name.endsWith('.json')
+        );
+        
+        if (userFiles.length === 0) {
+            return {
+                name: latestRepo.name,
+                currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
+            };
+        }
+        
+        // Get the latest file (highest number)
+        userFiles.sort((a, b) => {
+            const numA = parseInt(a.name.match(/\d+/)[0]) || 0;
+            const numB = parseInt(b.name.match(/\d+/)[0]) || 0;
+            return numB - numA;
+        });
+        
+        return {
+            name: latestRepo.name,
+            currentFile: userFiles[0].name
+        };
+        
+    } catch (error) {
+        console.error("Error getting current repo:", error);
+        // Return default first repo/file
+        return {
+            name: `${GITHUB_CONFIG.REPO_BASE_NAME}1`,
+            currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
+        };
+    }
+}
+
+// GitHub API helper functions
+async function fetchGitHubRepos() {
+    try {
+        const response = await fetch(`https://api.github.com/users/${GITHUB_CONFIG.USERNAME}/repos`, {
+            headers: {
+                'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`GitHub API error (${response.status}): ${errorText}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching GitHub repos:", error);
+        throw error;
+    }
+}
+
+async function createGitHubRepo(repoName) {
+    try {
+        const response = await fetch(`https://api.github.com/user/repos`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: repoName,
+                private: true,
+                auto_init: false,
+                description: `VIBRYX Users Database - ${repoName}`
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Failed to create repo: ${errorData.message || JSON.stringify(errorData)}`);
+        }
+        
+        const result = await response.json();
+        console.log(`✅ Created repo: ${repoName}`);
+        return result;
+    } catch (error) {
+        console.error("Error creating GitHub repo:", error);
+        throw error;
+    }
+}
+
+async function fetchRepoContents(repoName) {
+    try {
+        const response = await fetch(`https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents`, {
+            headers: {
+                'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch repo contents (${response.status}): ${errorText}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching repo contents:", error);
+        throw error;
+    }
+}
+
+async function getFileContent(repoName, fileName) {
+    try {
+        const response = await fetch(
+            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
+            {
+                headers: {
+                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            }
+        );
+        
+        if (response.status === 404) {
+            return null; // File doesn't exist
+        }
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch file (${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        const content = atob(data.content.replace(/\n/g, ''));
+        return {
+            content: content,
+            sha: data.sha
+        };
+    } catch (error) {
+        console.error("Error getting file content:", error);
+        throw error;
+    }
+}
+
+async function createFile(repoName, fileName, content) {
+    try {
+        const response = await fetch(
+            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: `VIBRYX: Create ${fileName}`,
+                    content: btoa(unescape(encodeURIComponent(content)))
+                })
+            }
+        );
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Failed to create file: ${errorData.message || JSON.stringify(errorData)}`);
+        }
+        
+        console.log(`✅ Created file: ${fileName}`);
+        return await response.json();
+    } catch (error) {
+        console.error("Error creating file:", error);
+        throw error;
+    }
+}
+
+async function updateFile(repoName, fileName, content, sha) {
+    try {
+        const response = await fetch(
+            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: `VIBRYX: Update ${fileName}`,
+                    content: btoa(unescape(encodeURIComponent(content))),
+                    sha: sha
+                })
+            }
+        );
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Failed to update file: ${errorData.message || JSON.stringify(errorData)}`);
+        }
+        
+        console.log(`✅ Updated file: ${fileName}`);
+        return await response.json();
+    } catch (error) {
+        console.error("Error updating file:", error);
+        throw error;
+    }
+}
+
+// Utility functions
 function showError(message) {
     errorMessage.textContent = message;
     errorMessage.style.display = 'block';
+    errorMessage.style.color = "red";
     
-    // Style for different error types
-    if (message.includes("already exists")) {
-        errorMessage.style.color = "#FFA500";
-        errorMessage.style.fontWeight = "bold";
-    } else {
-        errorMessage.style.color = "red";
-    }
-    
-    // Hide error after 5 seconds
     setTimeout(() => {
         errorMessage.style.display = 'none';
-        errorMessage.style.color = "red";
     }, 5000);
 }
 
-// Show success message
 function showSuccess(message) {
     errorMessage.textContent = message;
     errorMessage.style.color = "#3abe10";
-    errorMessage.style.fontWeight = "bold";
     errorMessage.style.display = 'block';
     
-    // Hide after 3 seconds (will be redirected before this)
     setTimeout(() => {
         errorMessage.style.display = 'none';
     }, 3000);
 }
 
-// Prevent form submission
-authForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-});
-
-// Handle Enter key
+// Event listeners
 passwordInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         if (signupCredentials) {
-            // If in signup flow, trigger accept terms if checkbox is checked
             if (agreeCheckbox.checked) {
                 acceptTermsBtn.click();
             }
@@ -311,10 +572,8 @@ passwordInput.addEventListener('keypress', (e) => {
     }
 });
 
-// Clear error when user starts typing
 emailInput.addEventListener('input', () => {
     errorMessage.style.display = 'none';
-    // Clear signup credentials if user edits email
     if (signupCredentials && emailInput.value !== signupCredentials.email) {
         signupCredentials = null;
     }
@@ -322,16 +581,32 @@ emailInput.addEventListener('input', () => {
 
 passwordInput.addEventListener('input', () => {
     errorMessage.style.display = 'none';
-    // Clear signup credentials if user edits password
     if (signupCredentials && passwordInput.value !== signupCredentials.password) {
         signupCredentials = null;
     }
 });
 
-// Also clear signup credentials when terms popup is closed
 document.addEventListener('click', (e) => {
     if (e.target === termsPopup) {
         signupCredentials = null;
         agreeCheckbox.checked = false;
     }
 });
+
+// Initialize
+(async function init() {
+    console.log("🚀 Initializing VIBRYX...");
+    console.log(`📡 Backend URL: ${BACKEND_URL}`);
+    
+    // Load GitHub config
+    const configLoaded = await initGitHubConfig();
+    
+    if (!configLoaded) {
+        signupBtn.disabled = true;
+        signupBtn.textContent = "Signup Disabled";
+        signupBtn.style.backgroundColor = "#666";
+        console.log("❌ Signup disabled due to config error");
+    } else {
+        console.log("✅ VIBRYX initialized successfully");
+    }
+})();
