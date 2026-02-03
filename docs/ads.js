@@ -1,12 +1,7 @@
-// ads.js - Fetch and display ads with batch loading
+// ads.js - Fetch and display ads with guaranteed image display
 document.addEventListener('DOMContentLoaded', async function() {
     const BACKEND_URL = 'https://musten-y.onrender.com';
     let GITHUB_CONFIG = null;
-    
-    // Batch configuration
-    const BATCH_SIZE = 5;
-    const BATCH_DELAY = 1000; // 1 second between batches
-    const REPOS_PER_PAGE = 100; // GitHub API max per page
     
     // Main container for ads
     let adsContainer = document.querySelector('.ads-container');
@@ -25,13 +20,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.body.insertBefore(adsContainer, document.querySelector('.bottom-bar'));
     }
     
-    // Create loading animation
+    // Create simple loading message
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'loading';
     loadingDiv.innerHTML = `
-        <div class="spinner"></div>
-        <p class="loading-text">Loading ads...</p>
-        <div class="loading-progress" id="loadingProgress"></div>
+        <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
+            Loading ads... It may take a moment...
+        </div>
     `;
     loadingDiv.style.cssText = `
         position: fixed;
@@ -40,44 +35,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         transform: translate(-50%, -50%);
         text-align: center;
         z-index: 1000;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 30px;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 40px;
         border-radius: 15px;
         border: 2px solid chartreuse;
     `;
     document.body.appendChild(loadingDiv);
     
-    // Add CSS for animations
+    // Add minimal CSS
     const style = document.createElement('style');
     style.textContent = `
-        .spinner {
-            width: 70px;
-            height: 70px;
-            border: 8px solid rgba(0, 0, 0, 0.1);
-            border-left-color: chartreuse;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        .loading-text {
-            color: chartreuse;
-            font-size: 24px;
-            font-weight: bold;
-        }
-        
-        .loading-progress {
-            color: white;
-            font-size: 14px;
-            opacity: 0.8;
-            margin-top: 10px;
-        }
-        
         .ad-card {
-            animation: fadeIn 0.5s ease-out;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid white;
+            border-radius: 15px;
+            padding: 0;
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            width: 100%;
         }
         
         .ad-image {
@@ -100,26 +77,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             font-size: 18px;
         }
         
-        .image-loading {
-            width: 100%;
-            height: 400px;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: chartreuse;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
         .ads-container::-webkit-scrollbar {
             width: 8px;
         }
@@ -137,7 +94,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         @media (max-width: 768px) {
             .ad-card {
                 margin: 0 10px 30px 10px;
-                border-radius: 10px;
             }
             
             .ad-image {
@@ -147,25 +103,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     `;
     document.head.appendChild(style);
     
-    // Load credentials from backend
+    // Load credentials
     async function loadCredentials() {
         try {
+            console.log('Loading credentials...');
             const response = await fetch(`${BACKEND_URL}/api/credentials`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
+            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
             
+            const result = await response.json();
             if (result.success) {
                 GITHUB_CONFIG = result.credentials;
-                console.log('✅ credentials loaded:', GITHUB_CONFIG.username);
+                console.log('✅ GitHub credentials loaded');
                 return true;
-            } else {
-                throw new Error(result.error || 'Failed to load credentials');
             }
+            throw new Error(result.error);
         } catch (error) {
-            console.error('❌ Error loading credentials:', error);
-            showError('Failed to load GitHub credentials from backend.');
+            console.error('❌ Failed to load credentials:', error);
+            showMessage('Failed to connect to backend. Make sure server is running.', 'error');
             return false;
         }
     }
@@ -178,152 +132,117 @@ document.addEventListener('DOMContentLoaded', async function() {
         };
     }
     
-    // Get authenticated image URL
-    async function getImageUrl(repoName, fileName) {
+    // Get ALL repositories (simplified)
+    async function getAllAdRepos() {
         try {
-            // First get file info to get download URL
-            const response = await fetch(
-                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
-                {
-                    headers: getGitHubHeaders()
-                }
-            );
-            
-            if (!response.ok) {
-                throw new Error(`Failed to get image info: ${fileName}`);
-            }
-            
-            const fileData = await response.json();
-            
-            // Use download_url if available, otherwise construct raw URL
-            if (fileData.download_url) {
-                return fileData.download_url;
-            } else {
-                // Fallback to raw URL with authentication
-                return `https://raw.githubusercontent.com/${GITHUB_CONFIG.username}/${repoName}/main/${fileName}`;
-            }
-            
-        } catch (error) {
-            console.error(`Error getting image URL for ${fileName}:`, error);
-            return null;
-        }
-    }
-    
-    // Fetch ALL ad repositories with pagination
-    async function fetchAllAdRepos() {
-        try {
-            console.log('📡 Fetching ALL ad repositories...');
-            
+            console.log('Fetching repositories...');
             let allRepos = [];
             let page = 1;
-            let hasMore = true;
             
-            while (hasMore) {
-                console.log(`📄 Fetching page ${page}...`);
-                
+            while (true) {
                 const response = await fetch(
-                    `${GITHUB_CONFIG.apiBase}/user/repos?type=private&sort=updated&direction=desc&page=${page}&per_page=${REPOS_PER_PAGE}`,
-                    {
-                        headers: getGitHubHeaders()
-                    }
+                    `${GITHUB_CONFIG.apiBase}/user/repos?type=private&page=${page}&per_page=100`,
+                    { headers: getGitHubHeaders() }
                 );
                 
-                if (!response.ok) {
-                    throw new Error(` API error: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
                 
                 const repos = await response.json();
+                if (repos.length === 0) break;
                 
-                // If no repos returned, we're done
-                if (repos.length === 0) {
-                    hasMore = false;
-                    console.log(`✅ Reached end of repositories at page ${page}`);
-                    break;
-                }
-                
-                // Filter for ad repositories
+                // Filter for ad repos
                 const adRepos = repos.filter(repo => 
                     repo.name.startsWith('ad-') && 
-                    !repo.fork && 
                     repo.private === true
                 );
                 
-                // Add to our collection
-                allRepos = [...allRepos, ...adRepos];
-                console.log(`📊 Page ${page}: Found ${adRepos.length} ad repos (Total: ${allRepos.length})`);
+                allRepos.push(...adRepos);
                 
-                // Check if we got fewer repos than requested (end of list)
-                if (repos.length < REPOS_PER_PAGE) {
-                    hasMore = false;
-                    console.log(`✅ Last page reached: ${repos.length} repos on page ${page}`);
-                }
+                // If we got less than 100, we're done
+                if (repos.length < 100) break;
                 
                 page++;
-                
-                // Safety limit: prevent infinite loops
-                if (page > 50) { // Max 5000 repos (50 pages × 100)
-                    console.warn('⚠️  Safety limit reached: Stopped at 50 pages');
-                    hasMore = false;
-                }
+                if (page > 10) break; // Safety limit
             }
             
-            console.log(`✅ Total ad repositories found: ${allRepos.length}`);
+            console.log(`Found ${allRepos.length} ad repositories`);
             return allRepos;
             
         } catch (error) {
-            console.error('❌ Error fetching all repos:', error);
-            throw error;
-        }
-    }
-    
-    // Get repository files
-    async function getRepoFiles(repoName) {
-        try {
-            const response = await fetch(
-                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents`,
-                {
-                    headers: getGitHubHeaders()
-                }
-            );
-            
-            if (!response.ok) {
-                throw new Error(`Failed to fetch files from ${repoName}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error(`❌ Error fetching files from ${repoName}:`, error);
+            console.error('Error fetching repos:', error);
             return [];
         }
     }
     
     // Get file content
-    async function getFileContent(repoName, filePath) {
+    async function getFileContent(repoName, fileName) {
         try {
             const response = await fetch(
-                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${filePath}`,
-                {
-                    headers: getGitHubHeaders()
-                }
+                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
+                { headers: getGitHubHeaders() }
             );
             
-            if (!response.ok) {
-                throw new Error(`Failed to fetch ${filePath}`);
-            }
+            if (!response.ok) return null;
             
             const fileData = await response.json();
-            // Decode base64 content
             return atob(fileData.content);
+            
         } catch (error) {
-            console.error(`❌ Error fetching ${filePath}:`, error);
+            console.error(`Error getting ${fileName}:`, error);
             return null;
         }
     }
     
-    // Process a single ad repo
+    // Get image as data URL (guaranteed to work for private repos)
+    async function getImageAsDataUrl(repoName, fileName) {
+        try {
+            console.log(`Getting image: ${repoName}/${fileName}`);
+            
+            // Get the file from GitHub API
+            const response = await fetch(
+                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
+                { headers: getGitHubHeaders() }
+            );
+            
+            if (!response.ok) {
+                console.error(`Failed to get image info: ${response.status}`);
+                return null;
+            }
+            
+            const fileData = await response.json();
+            
+            // Decode base64 content
+            const base64Content = fileData.content;
+            const mimeType = getMimeType(fileName);
+            
+            // Create data URL
+            return `data:${mimeType};base64,${base64Content}`;
+            
+        } catch (error) {
+            console.error(`Error getting image:`, error);
+            return null;
+        }
+    }
+    
+    // Helper: get MIME type from filename
+    function getMimeType(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const mimeTypes = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'svg': 'image/svg+xml',
+            'bmp': 'image/bmp'
+        };
+        return mimeTypes[ext] || 'image/jpeg';
+    }
+    
+    // Process single ad repository
     async function processAdRepo(repo) {
         try {
-            const adNumber = repo.name.match(/^ad-(\d+)$/)?.[1] || '?';
+            const adNumber = repo.name.match(/ad-(\d+)/)?.[1] || '?';
             
             const adData = {
                 repoName: repo.name,
@@ -335,465 +254,287 @@ document.addEventListener('DOMContentLoaded', async function() {
                 updatedAt: repo.updated_at
             };
             
-            // Get files from the repo
-            const files = await getRepoFiles(repo.name);
+            // Get repository contents
+            const contentsResponse = await fetch(
+                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repo.name}/contents`,
+                { headers: getGitHubHeaders() }
+            );
+            
+            if (!contentsResponse.ok) {
+                console.error(`Failed to get contents for ${repo.name}`);
+                return null;
+            }
+            
+            const contents = await contentsResponse.json();
             
             // Process files
-            for (const file of files) {
-                if (file.type === 'file') {
-                    if (file.name === 'title.txt') {
-                        adData.title = await getFileContent(repo.name, file.name);
-                    } else if (file.name === 'description.txt') {
-                        adData.description = await getFileContent(repo.name, file.name);
-                    } else if (file.name === 'visit.txt') {
-                        adData.visitUrl = await getFileContent(repo.name, file.name);
-                    } else if (file.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)) {
-                        // Get authenticated image URL
-                        const imageUrl = await getImageUrl(repo.name, file.name);
-                        if (imageUrl) {
+            for (const item of contents) {
+                if (item.type === 'file') {
+                    if (item.name === 'title.txt') {
+                        adData.title = await getFileContent(repo.name, 'title.txt');
+                    } else if (item.name === 'description.txt') {
+                        adData.description = await getFileContent(repo.name, 'description.txt');
+                    } else if (item.name === 'visit.txt') {
+                        adData.visitUrl = await getFileContent(repo.name, 'visit.txt');
+                    } else if (item.name.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i)) {
+                        // Get image as data URL (guaranteed to work)
+                        const imageDataUrl = await getImageAsDataUrl(repo.name, item.name);
+                        if (imageDataUrl) {
                             adData.images.push({
-                                name: file.name,
-                                url: imageUrl
+                                name: item.name,
+                                dataUrl: imageDataUrl
                             });
                         }
                     }
                 }
             }
             
-            console.log(`✅ Processed ad ${adNumber}: ${adData.title || 'No title'}`);
-            return adData;
+            // Only return if we have required data
+            if (adData.title && adData.description && adData.visitUrl) {
+                console.log(`✅ Processed ad ${adNumber}: ${adData.title}`);
+                return adData;
+            }
+            
+            return null;
             
         } catch (error) {
-            console.error(`❌ Error processing repo ${repo.name}:`, error);
+            console.error(`Error processing ${repo.name}:`, error);
             return null;
         }
     }
     
-    // Load image with authentication
-    function loadImageWithAuth(imgElement, imageUrl) {
-        return new Promise((resolve, reject) => {
-            // Show loading state
-            imgElement.style.opacity = '0';
-            
-            // Create a fetch request with authentication
-            fetch(imageUrl, {
-                headers: {
-                    'Authorization': `token ${GITHUB_CONFIG.token}`
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to load image');
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                imgElement.onload = () => {
-                    imgElement.style.opacity = '1';
-                    resolve();
-                };
-                imgElement.onerror = () => reject(new Error('Image load failed'));
-                imgElement.src = url;
-            })
-            .catch(error => {
-                console.error('Image load error:', error);
-                reject(error);
-            });
-        });
-    }
-    
-    // Display ad card
-    function displayAdCard(adData) {
-        // Skip if missing essential data
-        if (!adData.title || !adData.description || !adData.visitUrl) {
-            console.warn(`Skipping repo ${adData.repoName} - missing essential data`);
-            return null;
-        }
+    // Create and display ad card
+    function createAdCard(adData) {
+        // Create card container
+        const card = document.createElement('div');
+        card.className = 'ad-card';
         
-        // Create ad card
-        const adCard = document.createElement('div');
-        adCard.className = 'ad-card';
-        adCard.style.cssText = `
-            background: rgba(0, 0, 0, 0.85);
-            border: 2px solid white;
-            border-radius: 15px;
-            padding: 0;
-            margin-bottom: 40px;
-            backdrop-filter: blur(10px);
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-            width: 100%;
-            opacity: 0;
-            animation: fadeIn 0.5s ease-out forwards;
-        `;
-        
-        // Title header
-        const cardHeader = document.createElement('div');
-        cardHeader.style.cssText = `
+        // Header with title and ad number
+        const header = document.createElement('div');
+        header.style.cssText = `
             padding: 15px 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            flex-wrap: wrap;
+            align-items: center;
         `;
         
-        // Title
         const title = document.createElement('h2');
-        title.textContent = adData.title || 'Untitled Ad';
+        title.textContent = adData.title;
         title.style.cssText = `
             color: chartreuse;
             margin: 0;
             font-size: 20px;
             font-weight: bold;
-            flex-grow: 1;
-            margin-right: 10px;
         `;
         
-        // Ad number badge
-        const numberBadge = document.createElement('span');
-        numberBadge.textContent = ``;
-        numberBadge.style.cssText = `
+        const badge = document.createElement('span');
+        badge.textContent = ``;
+        badge.style.cssText = `
             background: chartreuse;
             color: black;
-            padding: 4px 10px;
-            border-radius: 12px;
+            padding: 5px 12px;
+            border-radius: 15px;
             font-size: 12px;
             font-weight: bold;
         `;
         
-        cardHeader.appendChild(title);
-        cardHeader.appendChild(numberBadge);
-        adCard.appendChild(cardHeader);
+        header.appendChild(title);
+        header.appendChild(badge);
+        card.appendChild(header);
         
-        // Images section
-        const imageContainer = document.createElement('div');
-        imageContainer.style.cssText = `
+        // Image section
+        const imageSection = document.createElement('div');
+        imageSection.style.cssText = `
             width: 100%;
             height: 400px;
-            overflow: hidden;
             background: black;
             position: relative;
         `;
         
         if (adData.images.length > 0) {
-            // Create loading indicator
-            const loadingDiv = document.createElement('div');
-            loadingDiv.className = 'image-loading';
-            loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading image...';
-            imageContainer.appendChild(loadingDiv);
-            
-            // Create image element
-            const imgElement = document.createElement('img');
-            imgElement.className = 'ad-image';
-            imgElement.alt = adData.images[0].name || 'Ad image';
-            imgElement.style.cssText = `
+            // Use the first image
+            const img = document.createElement('img');
+            img.className = 'ad-image';
+            img.src = adData.images[0].dataUrl;
+            img.alt = adData.images[0].name;
+            img.style.cssText = `
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
                 display: block;
-                transition: opacity 0.3s ease;
             `;
-            
-            // Load image with authentication
-            loadImageWithAuth(imgElement, adData.images[0].url)
-                .then(() => {
-                    // Remove loading indicator
-                    loadingDiv.remove();
-                    imgElement.style.opacity = '1';
-                })
-                .catch(error => {
-                    console.error('Failed to load image:', error);
-                    loadingDiv.innerHTML = `
-                        <div style="text-align: center;">
-                            <div style="font-size: 48px; margin-bottom: 10px;">📷</div>
-                            <div>Image not available</div>
-                        </div>
-                    `;
-                });
-            
-            imageContainer.appendChild(imgElement);
-            
+            imageSection.appendChild(img);
         } else {
-            // No image placeholder
-            const noImageDiv = document.createElement('div');
-            noImageDiv.className = 'no-image';
-            noImageDiv.innerHTML = `
+            const noImage = document.createElement('div');
+            noImage.className = 'no-image';
+            noImage.innerHTML = `
                 <div style="text-align: center;">
                     <div style="font-size: 48px; margin-bottom: 10px;">📷</div>
                     <div>No image available</div>
                 </div>
             `;
-            imageContainer.appendChild(noImageDiv);
+            imageSection.appendChild(noImage);
         }
         
-        adCard.appendChild(imageContainer);
+        card.appendChild(imageSection);
         
         // Description section
-        const descriptionContainer = document.createElement('div');
-        descriptionContainer.style.cssText = `
+        const descSection = document.createElement('div');
+        descSection.style.cssText = `
             padding: 20px;
         `;
         
         const description = document.createElement('p');
-        description.textContent = adData.description || 'No description available';
+        description.textContent = adData.description;
         description.style.cssText = `
             color: white;
-            margin: 0 0 25px 0;
-            line-height: 1.6;
+            margin: 0 0 20px 0;
+            line-height: 1.5;
             font-size: 16px;
             white-space: pre-line;
         `;
-        descriptionContainer.appendChild(description);
+        descSection.appendChild(description);
         
         // Visit button
-        if (adData.visitUrl) {
-            const visitButton = document.createElement('button');
-            visitButton.textContent = 'VISIT WEBSITE';
-            visitButton.style.cssText = `
-                background: chartreuse;
-                color: black;
-                border: none;
-                padding: 14px 28px;
-                border-radius: 25px;
-                font-size: 16px;
-                font-weight: bold;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                display: block;
-                margin: 0 auto 20px auto;
-                width: 90%;
-                max-width: 300px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            `;
-            
-            visitButton.onmouseover = () => {
-                visitButton.style.transform = 'scale(1.03)';
-                visitButton.style.boxShadow = '0 0 15px chartreuse';
-            };
-            
-            visitButton.onmouseout = () => {
-                visitButton.style.transform = 'scale(1)';
-                visitButton.style.boxShadow = 'none';
-            };
-            
-            visitButton.onclick = () => {
-                window.open(adData.visitUrl.trim(), '_blank');
-            };
-            
-            descriptionContainer.appendChild(visitButton);
-        }
+        const visitBtn = document.createElement('button');
+        visitBtn.textContent = 'VISIT WEBSITE';
+        visitBtn.style.cssText = `
+            background: chartreuse;
+            color: black;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
+            width: 90%;
+            max-width: 300px;
+        `;
         
-        adCard.appendChild(descriptionContainer);
+        visitBtn.onmouseover = () => {
+            visitBtn.style.transform = 'scale(1.05)';
+        };
         
-        return adCard;
+        visitBtn.onmouseout = () => {
+            visitBtn.style.transform = 'scale(1)';
+        };
+        
+        visitBtn.onclick = () => {
+            window.open(adData.visitUrl, '_blank');
+        };
+        
+        descSection.appendChild(visitBtn);
+        card.appendChild(descSection);
+        
+        return card;
     }
     
-    // Display ads function
-    function displayAds(adsData) {
-        // Clear container only if it's the first display
-        const isFirstDisplay = adsContainer.children.length === 0;
-        if (isFirstDisplay) {
-            adsContainer.innerHTML = '';
-        }
-        
-        // Sort by updated date (newest first)
-        const sortedAds = [...adsData].sort((a, b) => 
-            new Date(b.updatedAt) - new Date(a.updatedAt)
-        );
-        
-        // Remove duplicates
-        const uniqueAds = [];
-        const seenRepos = new Set();
-        
-        sortedAds.forEach(ad => {
-            if (!seenRepos.has(ad.repoName)) {
-                seenRepos.add(ad.repoName);
-                uniqueAds.push(ad);
-            }
-        });
-        
-        // Clear and redisplay all ads
-        adsContainer.innerHTML = '';
-        
-        // Display all ads
-        uniqueAds.forEach(adData => {
-            const adCard = displayAdCard(adData);
-            if (adCard) {
-                adsContainer.appendChild(adCard);
-            }
-        });
-        
-        console.log(`✅ Displayed ${uniqueAds.length} ads`);
-    }
-    
-    // Show error message
-    function showError(message) {
+    // Show message
+    function showMessage(text, type = 'info') {
         loadingDiv.style.display = 'none';
         
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
-        errorDiv.innerHTML = `
-            <div style="
-                background: rgba(255, 0, 0, 0.1);
-                border: 1px solid red;
-                border-radius: 10px;
-                padding: 20px;
-                margin: 20px;
-                text-align: center;
-            ">
-                <p style="color: red; font-size: 18px; margin: 0;">${message}</p>
-            </div>
+        const msgDiv = document.createElement('div');
+        msgDiv.style.cssText = `
+            background: ${type === 'error' ? 'rgba(255, 0, 0, 0.1)' : 'rgba(0, 255, 0, 0.1)'};
+            border: 1px solid ${type === 'error' ? 'red' : 'chartreuse'};
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px;
+            text-align: center;
+            color: ${type === 'error' ? 'red' : 'chartreuse'};
         `;
-        adsContainer.appendChild(errorDiv);
+        msgDiv.textContent = text;
+        adsContainer.appendChild(msgDiv);
     }
     
-    // Show success message
-    function showSuccess(message) {
-        loadingDiv.style.display = 'none';
-        
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success-message';
-        successDiv.innerHTML = `
-            <div style="
-                background: rgba(0, 255, 0, 0.1);
-                border: 1px solid chartreuse;
-                border-radius: 10px;
-                padding: 20px;
-                margin: 20px;
-                text-align: center;
-            ">
-                <p style="color: chartreuse; font-size: 18px; margin: 0;">${message}</p>
-            </div>
-        `;
-        adsContainer.appendChild(successDiv);
-    }
-    
-    // Main function to load ads with batch processing
+    // Main function to load and display ads
     async function loadAds() {
-        console.log('🚀 Starting to load ads with batch processing...');
+        console.log('Starting ad loading...');
         
-        // Reset state
+        // Reset
         adsContainer.innerHTML = '';
         loadingDiv.style.display = 'flex';
         
         try {
-            // Load credentials first
-            if (!GITHUB_CONFIG) {
-                const credentialsLoaded = await loadCredentials();
-                if (!credentialsLoaded) {
-                    return;
-                }
-            }
-            
-            // Update loading text
-            const loadingProgress = document.getElementById('loadingProgress');
-            loadingProgress.textContent = 'Fetching all repositories...';
-            
-            // Get ALL ad repos with pagination
-            const repos = await fetchAllAdRepos();
-            
-            if (repos.length === 0) {
-                loadingDiv.style.display = 'none';
-                showSuccess('No ads found yet. Create your first ad!');
+            // Load credentials
+            if (!await loadCredentials()) {
                 return;
             }
             
-            console.log(`📊 Processing ${repos.length} ads in batches of ${BATCH_SIZE}...`);
+            // Get all ad repositories
+            const repos = await getAllAdRepos();
             
-            // Sort repos by updated date (newest first)
+            if (repos.length === 0) {
+                showMessage('No ads found. Create your first ad!', 'info');
+                return;
+            }
+            
+            // Sort by update date (newest first)
             repos.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
             
-            // Variables for batch processing
-            let processedAds = [];
-            const totalBatches = Math.ceil(repos.length / BATCH_SIZE);
+            // Process first 5 immediately
+            const firstBatch = repos.slice(0, 5);
+            const processedAds = [];
             
-            // Process and display first batch immediately
-            loadingProgress.textContent = `Processing first ${BATCH_SIZE} ads...`;
-            
-            for (let i = 0; i < Math.min(BATCH_SIZE, repos.length); i++) {
-                const adData = await processAdRepo(repos[i]);
-                if (adData) {
-                    processedAds.push(adData);
-                }
+            for (const repo of firstBatch) {
+                const ad = await processAdRepo(repo);
+                if (ad) processedAds.push(ad);
             }
             
-            // Display first batch immediately
+            // Display first batch
             if (processedAds.length > 0) {
-                displayAds(processedAds);
                 loadingDiv.style.display = 'none';
-                console.log(`✅ First batch (${processedAds.length} ads) displayed immediately`);
-            } else {
-                loadingProgress.textContent = 'No valid ads found in first batch...';
-            }
-            
-            // Process remaining batches in background with delay
-            for (let batch = 1; batch < totalBatches; batch++) {
-                // Wait before next batch
-                await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
-                
-                // Calculate batch range
-                const startIndex = batch * BATCH_SIZE;
-                const endIndex = Math.min(startIndex + BATCH_SIZE, repos.length);
-                
-                console.log(`🔄 Processing batch ${batch + 1}/${totalBatches} (ads ${startIndex + 1}-${endIndex})`);
-                
-                // Process this batch in parallel
-                const batchRepos = repos.slice(startIndex, endIndex);
-                const batchPromises = batchRepos.map(repo => processAdRepo(repo));
-                const batchResults = await Promise.all(batchPromises);
-                
-                // Add valid ads to collection
-                batchResults.forEach(ad => {
-                    if (ad) {
-                        processedAds.push(ad);
-                    }
+                processedAds.forEach(ad => {
+                    const card = createAdCard(ad);
+                    adsContainer.appendChild(card);
                 });
-                
-                // Silently update display with all ads processed so far
-                displayAds(processedAds);
-                
-                // Show loading indicator again if it was hidden and we have more batches
-                if (batch < totalBatches - 1 && loadingDiv.style.display === 'none') {
-                    loadingDiv.style.display = 'flex';
-                    loadingProgress.textContent = `Loading more ads... (${processedAds.length} loaded)`;
-                    
-                    // Hide loading indicator again after 1 second
-                    setTimeout(() => {
-                        if (loadingDiv.style.display !== 'none') {
-                            loadingDiv.style.display = 'none';
-                        }
-                    }, 1000);
-                }
+                console.log(`Displayed ${processedAds.length} ads`);
+            } else {
+                showMessage('No valid ads found.', 'error');
+                return;
             }
             
-            // Final update
-            console.log(`✅ Completed! Processed ${processedAds.length} valid ads out of ${repos.length} repositories`);
-            
-            if (processedAds.length === 0) {
-                showError('No valid ads found. Make sure each ad has title, description, and URL.');
-            } else {
-                // Final refresh to ensure all ads are displayed
-                displayAds(processedAds);
-                console.log(`🎉 All ${processedAds.length} ads loaded and displayed!`);
+            // Process remaining in background (simplified)
+            if (repos.length > 5) {
+                console.log('Processing remaining ads in background...');
+                
+                // Process remaining in chunks
+                for (let i = 5; i < repos.length; i += 5) {
+                    // Wait 1 second between batches
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    const batch = repos.slice(i, i + 5);
+                    for (const repo of batch) {
+                        const ad = await processAdRepo(repo);
+                        if (ad) {
+                            processedAds.push(ad);
+                            // Add to display
+                            const card = createAdCard(ad);
+                            adsContainer.appendChild(card);
+                        }
+                    }
+                    
+                    console.log(`Processed batch ${Math.floor(i/5) + 1}`);
+                }
+                
+                console.log(`✅ Total ads displayed: ${processedAds.length}`);
             }
             
         } catch (error) {
-            console.error('❌ Error in loadAds:', error);
-            showError('Failed to load ads. Check console for details.');
-            loadingDiv.style.display = 'none';
+            console.error('Error loading ads:', error);
+            showMessage('Error loading ads. Check console.', 'error');
         }
     }
     
     // Add refresh button
     const appBar = document.querySelector('.app-bar');
     if (appBar) {
-        const refreshButton = document.createElement('button');
-        refreshButton.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Refresh';
-        refreshButton.style.cssText = `
+        const refreshBtn = document.createElement('button');
+        refreshBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> Refresh';
+        refreshBtn.style.cssText = `
             background: black;
             margin-top: 20px;
             margin-bottom: 20px;
@@ -807,68 +548,26 @@ document.addEventListener('DOMContentLoaded', async function() {
             color: white;
             width: 15%;
             cursor: pointer;
-            transition: all 0.3s ease;
             margin-left: auto;
         `;
         
-        refreshButton.onmouseover = () => {
-            refreshButton.style.background = 'chartreuse';
-            refreshButton.style.color = 'black';
-            refreshButton.style.borderColor = 'chartreuse';
+        refreshBtn.onmouseover = () => {
+            refreshBtn.style.background = 'chartreuse';
+            refreshBtn.style.color = 'black';
+            refreshBtn.style.borderColor = 'chartreuse';
         };
         
-        refreshButton.onmouseout = () => {
-            refreshButton.style.background = 'black';
-            refreshButton.style.color = 'white';
-            refreshButton.style.borderColor = 'white';
+        refreshBtn.onmouseout = () => {
+            refreshBtn.style.background = 'black';
+            refreshBtn.style.color = 'white';
+            refreshBtn.style.borderColor = 'white';
         };
         
-        refreshButton.onclick = () => {
-            console.log('🔄 Refreshing ads...');
-            loadAds();
-        };
+        refreshBtn.onclick = loadAds;
         
-        appBar.appendChild(refreshButton);
+        appBar.appendChild(refreshBtn);
     }
     
-    // Add status indicator
-    const statusIndicator = document.createElement('div');
-    statusIndicator.id = 'status-indicator';
-    statusIndicator.style.cssText = `
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 5px 10px;
-        border-radius: 5px;
-        font-size: 12px;
-        z-index: 1001;
-        display: none;
-    `;
-    document.body.appendChild(statusIndicator);
-    
-    // Check backend connection
-    async function checkBackend() {
-        try {
-            const response = await fetch(`${BACKEND_URL}/`);
-            if (response.ok) {
-                statusIndicator.textContent = 'Loaded';
-                statusIndicator.style.color = 'chartreuse';
-                statusIndicator.style.display = 'block';
-                return true;
-            }
-        } catch (error) {
-            statusIndicator.textContent = '❌ Backend Offline';
-            statusIndicator.style.color = 'red';
-            statusIndicator.style.display = 'block';
-            return false;
-        }
-    }
-    
-    // Initialize
-    checkBackend();
-    
-    // Start loading ads
+    // Start loading
     loadAds();
 });
