@@ -1,4 +1,3 @@
-
 // Firebase Configuration
 const firebaseConfig = {
     apiKey: "AIzaSyDx6NZJ9uPhxu2AbJJiTiEat1GyU_VPQ2w",
@@ -40,13 +39,23 @@ async function initGitHubConfig() {
     try {
         console.log(`🔄 Fetching GitHub configuration from backend at: ${BACKEND_URL}/api/config`);
         const response = await fetch(`${BACKEND_URL}/api/config`);
-        if (!response.ok) throw new Error(`Failed to fetch config: ${response.status}`);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Backend response not OK:", errorText);
+            throw new Error(`Failed to fetch config: ${response.status} ${response.statusText}`);
+        }
         
         const data = await response.json();
+        console.log("Backend config response:", data);
+        
         if (data.success) {
             GITHUB_CONFIG = data.config;
             console.log("✅ GitHub configuration loaded");
+            console.log(`   Token: ${GITHUB_CONFIG.TOKEN ? 'Present (first 10 chars: ' + GITHUB_CONFIG.TOKEN.substring(0, 10) + '...)' : 'Missing'}`);
             console.log(`   Username: ${GITHUB_CONFIG.USERNAME}`);
+            console.log(`   Repo Base: ${GITHUB_CONFIG.REPO_BASE_NAME}`);
+            console.log(`   File Base: ${GITHUB_CONFIG.USER_DATA_BASE_NAME}`);
+            console.log(`   Max Users Per File: ${GITHUB_CONFIG.MAX_USERS_PER_FILE}`);
             return true;
         } else {
             throw new Error('Invalid config response from backend');
@@ -166,7 +175,7 @@ acceptTermsBtn.addEventListener('click', async () => {
         const user = userCredential.user;
         console.log("Firebase account created:", user.email);
         
-        // 2. Store user in GitHub
+        // 2. Store user in GitHub (ONE FILE PER USER)
         const success = await createUserInGitHub(
             user.uid, 
             signupCredentials.email, 
@@ -230,9 +239,9 @@ declineTermsBtn.addEventListener('click', () => {
     agreeCheckbox.checked = false;
 });
 
-// GITHUB FUNCTIONS (All logic in frontend)
+// GITHUB FUNCTIONS (ONE FILE PER USER IMPLEMENTATION)
 async function createUserInGitHub(firebaseUID, email, password) {
-    console.log("Starting GitHub user creation...");
+    console.log("Starting GitHub user creation (ONE FILE PER USER)...");
     
     try {
         // Check if we have GitHub config
@@ -240,55 +249,70 @@ async function createUserInGitHub(firebaseUID, email, password) {
             throw new Error("GitHub configuration not loaded");
         }
         
-        // 1. Get current repo and file
-        const currentRepoInfo = await getCurrentRepoAndFile();
-        const currentRepoName = currentRepoInfo.name;
-        const currentFileName = currentRepoInfo.currentFile;
+        console.log("GitHub Config:", {
+            TOKEN_PRESENT: GITHUB_CONFIG.TOKEN ? "Yes" : "No",
+            USERNAME: GITHUB_CONFIG.USERNAME,
+            MAX_USERS_PER_FILE: GITHUB_CONFIG.MAX_USERS_PER_FILE
+        });
         
-        console.log(`Using repo: ${currentRepoName}, file: ${currentFileName}`);
+        // 1. First, try to get existing repos
+        let currentRepo = await getCurrentRepo();
+        console.log(`Current repo: ${currentRepo}`);
         
-        // 2. Get current file content
-        const currentFileContent = await getFileContent(currentRepoName, currentFileName);
-        let usersArray = [];
+        // 2. Check if repo exists, if not create it
+        const repoExists = await checkRepoExists(currentRepo);
         
-        if (currentFileContent) {
-            usersArray = JSON.parse(currentFileContent.content);
+        if (!repoExists) {
+            console.log(`Repo ${currentRepo} doesn't exist, trying to create it...`);
+            try {
+                await createGitHubRepo(currentRepo);
+                console.log(`✅ Successfully created repo: ${currentRepo}`);
+            } catch (repoError) {
+                console.error(`Failed to create repo ${currentRepo}:`, repoError);
+                // Try using just the first repo instead
+                currentRepo = `${GITHUB_CONFIG.REPO_BASE_NAME}1`;
+                console.log(`Falling back to: ${currentRepo}`);
+                
+                // Check if fallback repo exists
+                const fallbackRepoExists = await checkRepoExists(currentRepo);
+                if (!fallbackRepoExists) {
+                    throw new Error(`Cannot create or access any repos. Please check GitHub token permissions.`);
+                }
+            }
         }
         
-        // 3. Create new user object
-        const newUser = {
+        // 3. Get the next available file number in this repo
+        const nextFileNumber = await getNextFileNumber(currentRepo);
+        console.log(`Next file number: ${nextFileNumber}`);
+        
+        // 4. Create the file name (ONE USER PER FILE)
+        const fileName = `${GITHUB_CONFIG.USER_DATA_BASE_NAME}${nextFileNumber}.json`;
+        
+        // 5. Create user object (ONE USER PER FILE - single object, not array)
+        const userData = {
+            id: firebaseUID,
             email: email,
             firebase_uid: firebaseUID,
             name: null,
             password: password,
+            location: null,
+            age: null,
             followers: [],
             pic_url: null,
             created_at: new Date().toISOString(),
-            last_login: null
+            last_login: null,
+            updated_at: new Date().toISOString(),
+            file_number: nextFileNumber,
+            repo: currentRepo
         };
         
-        // 4. Add new user to array
-        usersArray.push(newUser);
-        const newContent = JSON.stringify(usersArray, null, 2);
+        // 6. Create the file with just this one user (not in an array)
+        const fileContent = JSON.stringify(userData, null, 2);
+        await createFile(currentRepo, fileName, fileContent);
         
-        // 5. Check if file will exceed size limit
-        const newFileSize = new Blob([newContent]).size;
-        const newFileSizeMB = newFileSize / (1024 * 1024);
+        console.log(`✅ Created user file: ${fileName} in repo: ${currentRepo}`);
+        console.log(`📁 ONE USER PER FILE: User ${email} stored in ${fileName}`);
         
-        if (newFileSizeMB >= GITHUB_CONFIG.MAX_FILE_SIZE_MB) {
-            console.log(`File will exceed ${GITHUB_CONFIG.MAX_FILE_SIZE_MB}MB, creating new file`);
-            const nextFileNumber = parseInt(currentFileName.match(/\d+/)[0]) + 1;
-            const nextFileName = `${GITHUB_CONFIG.USER_DATA_BASE_NAME}${nextFileNumber}.json`;
-            const nextFileContent = JSON.stringify([newUser], null, 2);
-            
-            await createFile(currentRepoName, nextFileName, nextFileContent);
-            console.log(`Created new file: ${nextFileName}`);
-        } else {
-            await updateFile(currentRepoName, currentFileName, newContent, currentFileContent?.sha);
-            console.log(`Updated existing file: ${currentFileName}`);
-        }
-        
-        console.log("✅ User successfully stored in GitHub");
         return true;
         
     } catch (error) {
@@ -298,7 +322,7 @@ async function createUserInGitHub(firebaseUID, email, password) {
     }
 }
 
-async function getCurrentRepoAndFile() {
+async function getCurrentRepo() {
     try {
         // Check if we have GitHub config
         if (!GITHUB_CONFIG.TOKEN || !GITHUB_CONFIG.USERNAME) {
@@ -312,13 +336,9 @@ async function getCurrentRepoAndFile() {
         const userRepos = repos.filter(repo => repo.name.startsWith(GITHUB_CONFIG.REPO_BASE_NAME));
         
         if (userRepos.length === 0) {
-            // No repo exists, create the first one
-            console.log("No existing repo found, creating first repo");
-            const newRepo = await createGitHubRepo(`${GITHUB_CONFIG.REPO_BASE_NAME}1`);
-            return {
-                name: newRepo.name,
-                currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
-            };
+            // No repo exists, return the first repo name
+            console.log("No existing repos found, will use first repo");
+            return `${GITHUB_CONFIG.REPO_BASE_NAME}1`;
         }
         
         // Get the latest repo (highest number)
@@ -328,50 +348,118 @@ async function getCurrentRepoAndFile() {
             return numB - numA;
         });
         
-        const latestRepo = userRepos[0];
+        return userRepos[0].name;
         
-        // Get files in this repo
-        const files = await fetchRepoContents(latestRepo.name);
+    } catch (error) {
+        console.error("Error getting current repo:", error);
+        // Return default first repo
+        return `${GITHUB_CONFIG.REPO_BASE_NAME}1`;
+    }
+}
+
+async function checkRepoExists(repoName) {
+    try {
+        console.log(`Checking if repo exists: ${repoName}`);
+        const response = await fetch(
+            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}`,
+            {
+                headers: {
+                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            }
+        );
         
-        // Filter JSON files that match our pattern
+        if (response.status === 200) {
+            console.log(`✅ Repo ${repoName} exists`);
+            return true;
+        } else if (response.status === 404) {
+            console.log(`❌ Repo ${repoName} does not exist`);
+            return false;
+        } else {
+            console.log(`⚠️ Unexpected status checking repo: ${response.status}`);
+            return false;
+        }
+    } catch (error) {
+        console.error("Error checking repo existence:", error);
+        return false;
+    }
+}
+
+async function getNextFileNumber(repoName) {
+    try {
+        // Get all files in the repo
+        const files = await fetchRepoContents(repoName);
+        
+        // Filter files that match our pattern
         const userFiles = files.filter(file => 
             file.name.startsWith(GITHUB_CONFIG.USER_DATA_BASE_NAME) && 
             file.name.endsWith('.json')
         );
         
         if (userFiles.length === 0) {
-            return {
-                name: latestRepo.name,
-                currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
-            };
+            return 1; // First file
         }
         
-        // Get the latest file (highest number)
-        userFiles.sort((a, b) => {
-            const numA = parseInt(a.name.match(/\d+/)[0]) || 0;
-            const numB = parseInt(b.name.match(/\d+/)[0]) || 0;
-            return numB - numA;
+        // Extract numbers from file names and find the highest
+        let maxNumber = 0;
+        userFiles.forEach(file => {
+            const match = file.name.match(new RegExp(`${GITHUB_CONFIG.USER_DATA_BASE_NAME}(\\d+)\\.json`));
+            if (match) {
+                const num = parseInt(match[1]);
+                if (num > maxNumber) maxNumber = num;
+            }
         });
         
-        return {
-            name: latestRepo.name,
-            currentFile: userFiles[0].name
-        };
+        return maxNumber + 1;
         
     } catch (error) {
-        console.error("Error getting current repo:", error);
-        // Return default first repo/file
-        return {
-            name: `${GITHUB_CONFIG.REPO_BASE_NAME}1`,
-            currentFile: `${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json`
-        };
+        console.error("Error getting next file number:", error);
+        return 1; // Start from 1 if error
+    }
+}
+
+// SIMPLIFIED: Don't create new repos automatically for now
+// Just use the existing repo or create the first one if needed
+async function shouldCreateNewRepo(currentRepo, nextFileNumber) {
+    // For now, keep it simple - don't create new repos automatically
+    return false;
+}
+
+async function createNextRepo() {
+    try {
+        // Get current highest repo number
+        const repos = await fetchGitHubRepos();
+        const userRepos = repos.filter(repo => repo.name.startsWith(GITHUB_CONFIG.REPO_BASE_NAME));
+        
+        let maxNumber = 0;
+        userRepos.forEach(repo => {
+            const num = parseInt(repo.name.replace(GITHUB_CONFIG.REPO_BASE_NAME, '')) || 0;
+            if (num > maxNumber) maxNumber = num;
+        });
+        
+        const nextNumber = maxNumber + 1;
+        const newRepoName = `${GITHUB_CONFIG.REPO_BASE_NAME}${nextNumber}`;
+        
+        console.log(`Attempting to create new repo: ${newRepoName}`);
+        
+        // Create the new repo
+        const newRepo = await createGitHubRepo(newRepoName);
+        
+        console.log(`✅ Created new repo: ${newRepoName}`);
+        return newRepoName;
+        
+    } catch (error) {
+        console.error("Error creating next repo:", error);
+        throw error;
     }
 }
 
 // GitHub API helper functions
 async function fetchGitHubRepos() {
     try {
-        const response = await fetch(`https://api.github.com/users/${GITHUB_CONFIG.USERNAME}/repos`, {
+        console.log(`Fetching repos for user: ${GITHUB_CONFIG.USERNAME}`);
+        const response = await fetch(`https://api.github.com/users/${GITHUB_CONFIG.USERNAME}/repos?per_page=100`, {
             headers: {
                 'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
                 'Accept': 'application/vnd.github.v3+json'
@@ -380,18 +468,31 @@ async function fetchGitHubRepos() {
         
         if (!response.ok) {
             const errorText = await response.text();
+            console.error("GitHub API error response:", errorText);
+            
+            // Check for common errors
+            if (response.status === 401) {
+                throw new Error("GitHub token is invalid or expired. Please check your token.");
+            } else if (response.status === 403) {
+                throw new Error("GitHub API rate limit exceeded or token doesn't have repo permissions.");
+            }
+            
             throw new Error(`GitHub API error (${response.status}): ${errorText}`);
         }
         
-        return await response.json();
+        const repos = await response.json();
+        console.log(`Successfully fetched ${repos.length} repos`);
+        return repos;
     } catch (error) {
         console.error("Error fetching GitHub repos:", error);
-        throw error;
+        // Return empty array instead of throwing
+        return [];
     }
 }
 
 async function createGitHubRepo(repoName) {
     try {
+        console.log(`Creating repo: ${repoName}`);
         const response = await fetch(`https://api.github.com/user/repos`, {
             method: 'POST',
             headers: {
@@ -403,13 +504,30 @@ async function createGitHubRepo(repoName) {
                 name: repoName,
                 private: true,
                 auto_init: false,
-                description: `VIBRYX Users Database - ${repoName}`
+                description: `VIBRYX Users Database - ${repoName}`,
+                has_issues: false,
+                has_projects: false,
+                has_wiki: false,
+                is_template: false
             })
         });
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(`Failed to create repo: ${errorData.message || JSON.stringify(errorData)}`);
+            console.error("GitHub create repo error details:", errorData);
+            
+            if (response.status === 401) {
+                throw new Error("GitHub token doesn't have permission to create repositories");
+            } else if (response.status === 422) {
+                // Repository might already exist or name is invalid
+                if (errorData.message && errorData.message.includes('already exists')) {
+                    console.log(`Repo ${repoName} already exists`);
+                    return { name: repoName }; // Return mock response
+                }
+                throw new Error(`Invalid repository name or configuration: ${errorData.message}`);
+            }
+            
+            throw new Error(`Failed to create repo (${response.status}): ${errorData.message || 'Unknown error'}`);
         }
         
         const result = await response.json();
@@ -423,6 +541,7 @@ async function createGitHubRepo(repoName) {
 
 async function fetchRepoContents(repoName) {
     try {
+        console.log(`Fetching contents for repo: ${repoName}`);
         const response = await fetch(`https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents`, {
             headers: {
                 'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
@@ -430,53 +549,39 @@ async function fetchRepoContents(repoName) {
             }
         });
         
+        if (response.status === 404) {
+            console.log(`Repo ${repoName} not found, returning empty array`);
+            return [];
+        }
+        
         if (!response.ok) {
             const errorText = await response.text();
+            console.error("GitHub repo contents error:", errorText);
+            
+            if (response.status === 403) {
+                console.log("Rate limit or permission issue, returning empty array");
+                return [];
+            }
+            
             throw new Error(`Failed to fetch repo contents (${response.status}): ${errorText}`);
         }
         
-        return await response.json();
+        const contents = await response.json();
+        console.log(`Found ${contents.length} items in repo ${repoName}`);
+        return contents;
     } catch (error) {
         console.error("Error fetching repo contents:", error);
-        throw error;
-    }
-}
-
-async function getFileContent(repoName, fileName) {
-    try {
-        const response = await fetch(
-            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
-            {
-                headers: {
-                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            }
-        );
-        
-        if (response.status === 404) {
-            return null; // File doesn't exist
-        }
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Failed to fetch file (${response.status}): ${errorText}`);
-        }
-        
-        const data = await response.json();
-        const content = atob(data.content.replace(/\n/g, ''));
-        return {
-            content: content,
-            sha: data.sha
-        };
-    } catch (error) {
-        console.error("Error getting file content:", error);
-        throw error;
+        return []; // Return empty array instead of throwing
     }
 }
 
 async function createFile(repoName, fileName, content) {
     try {
+        console.log(`Creating file: ${repoName}/${fileName}`);
+        
+        // Encode content to base64
+        const encodedContent = btoa(unescape(encodeURIComponent(content)));
+        
         const response = await fetch(
             `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
             {
@@ -487,53 +592,29 @@ async function createFile(repoName, fileName, content) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    message: `VIBRYX: Create ${fileName}`,
-                    content: btoa(unescape(encodeURIComponent(content)))
+                    message: `VIBRYX: Create user ${fileName}`,
+                    content: encodedContent
                 })
             }
         );
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(`Failed to create file: ${errorData.message || JSON.stringify(errorData)}`);
+            console.error("GitHub create file error details:", errorData);
+            
+            if (response.status === 409) {
+                // File already exists, try with next number
+                throw new Error(`File ${fileName} already exists. Please try again.`);
+            }
+            
+            throw new Error(`Failed to create file (${response.status}): ${errorData.message || 'Unknown error'}`);
         }
         
+        const result = await response.json();
         console.log(`✅ Created file: ${fileName}`);
-        return await response.json();
+        return result;
     } catch (error) {
         console.error("Error creating file:", error);
-        throw error;
-    }
-}
-
-async function updateFile(repoName, fileName, content, sha) {
-    try {
-        const response = await fetch(
-            `https://api.github.com/repos/${GITHUB_CONFIG.USERNAME}/${repoName}/contents/${fileName}`,
-            {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${GITHUB_CONFIG.TOKEN}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: `VIBRYX: Update ${fileName}`,
-                    content: btoa(unescape(encodeURIComponent(content))),
-                    sha: sha
-                })
-            }
-        );
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Failed to update file: ${errorData.message || JSON.stringify(errorData)}`);
-        }
-        
-        console.log(`✅ Updated file: ${fileName}`);
-        return await response.json();
-    } catch (error) {
-        console.error("Error updating file:", error);
         throw error;
     }
 }
@@ -608,5 +689,9 @@ document.addEventListener('click', (e) => {
         console.log("❌ Signup disabled due to config error");
     } else {
         console.log("✅ VIBRYX initialized successfully");
+        console.log("📝 Storage: ONE USER PER FILE");
+        console.log(`📁 Repo pattern: ${GITHUB_CONFIG.REPO_BASE_NAME}1, ${GITHUB_CONFIG.REPO_BASE_NAME}2, ...`);
+        console.log(`📄 File pattern: ${GITHUB_CONFIG.USER_DATA_BASE_NAME}1.json, ${GITHUB_CONFIG.USER_DATA_BASE_NAME}2.json, ...`);
+        console.log(`👤 Each file contains exactly ONE user`);
     }
 })();
