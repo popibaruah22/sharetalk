@@ -1,7 +1,11 @@
-// ads.js - Fetch and display ads with guaranteed image display
+// ads.js - Fetch and display ads with batch loading
 document.addEventListener('DOMContentLoaded', async function() {
     const BACKEND_URL = 'https://musten-y.onrender.com';
     let GITHUB_CONFIG = null;
+    
+    // Batch configuration
+    const BATCH_SIZE = 5;
+    const BATCH_DELAY = 1000; // 1 second between batches
     
     // Main container for ads
     let adsContainer = document.querySelector('.ads-container');
@@ -25,7 +29,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadingDiv.className = 'loading';
     loadingDiv.innerHTML = `
         <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
-            Loading ads... It may take a moment...
+            Loading ads... This may take a moment please refresh the app if it takes more than 1 minute...
         </div>
     `;
     loadingDiv.style.cssText = `
@@ -55,6 +59,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             margin-left: auto;
             margin-right: auto;
             width: 100%;
+            animation: fadeIn 0.5s ease-out;
         }
         
         .ad-image {
@@ -75,6 +80,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             justify-content: center;
             color: white;
             font-size: 18px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .ads-container::-webkit-scrollbar {
@@ -450,9 +460,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         adsContainer.appendChild(msgDiv);
     }
     
-    // Main function to load and display ads
+    // Main function to load and display ads with batch loading
     async function loadAds() {
-        console.log('Starting ad loading...');
+        console.log('🚀 Starting ad loading with batch processing...');
         
         // Reset
         adsContainer.innerHTML = '';
@@ -475,56 +485,58 @@ document.addEventListener('DOMContentLoaded', async function() {
             // Sort by update date (newest first)
             repos.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
             
-            // Process first 5 immediately
-            const firstBatch = repos.slice(0, 5);
-            const processedAds = [];
+            // Variables for batch loading
+            let allProcessedAds = [];
             
-            for (const repo of firstBatch) {
-                const ad = await processAdRepo(repo);
-                if (ad) processedAds.push(ad);
-            }
-            
-            // Display first batch
-            if (processedAds.length > 0) {
-                loadingDiv.style.display = 'none';
-                processedAds.forEach(ad => {
-                    const card = createAdCard(ad);
-                    adsContainer.appendChild(card);
-                });
-                console.log(`Displayed ${processedAds.length} ads`);
-            } else {
-                showMessage('No valid ads found.', 'error');
-                return;
-            }
-            
-            // Process remaining in background (simplified)
-            if (repos.length > 5) {
-                console.log('Processing remaining ads in background...');
+            // Process and display in batches
+            for (let i = 0; i < repos.length; i += BATCH_SIZE) {
+                const batchRepos = repos.slice(i, i + BATCH_SIZE);
+                const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
                 
-                // Process remaining in chunks
-                for (let i = 5; i < repos.length; i += 5) {
-                    // Wait 1 second between batches
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log(`🔄 Processing batch ${batchNumber} (repos ${i + 1}-${Math.min(i + BATCH_SIZE, repos.length)})`);
+                
+                // Process current batch
+                const batchPromises = batchRepos.map(repo => processAdRepo(repo));
+                const batchResults = await Promise.all(batchPromises);
+                
+                // Filter valid ads
+                const validBatchAds = batchResults.filter(ad => ad !== null);
+                
+                // Add to collection
+                allProcessedAds.push(...validBatchAds);
+                
+                // Display this batch's ads
+                if (validBatchAds.length > 0) {
+                    validBatchAds.forEach(ad => {
+                        const card = createAdCard(ad);
+                        adsContainer.appendChild(card);
+                    });
                     
-                    const batch = repos.slice(i, i + 5);
-                    for (const repo of batch) {
-                        const ad = await processAdRepo(repo);
-                        if (ad) {
-                            processedAds.push(ad);
-                            // Add to display
-                            const card = createAdCard(ad);
-                            adsContainer.appendChild(card);
-                        }
+                    console.log(`✅ Batch ${batchNumber}: Displayed ${validBatchAds.length} ads`);
+                    
+                    // Hide loading after first batch
+                    if (i === 0) {
+                        loadingDiv.style.display = 'none';
+                        console.log('📱 First batch displayed - loading indicator hidden');
                     }
-                    
-                    console.log(`Processed batch ${Math.floor(i/5) + 1}`);
                 }
                 
-                console.log(`✅ Total ads displayed: ${processedAds.length}`);
+                // Wait 1 second before next batch (except after last batch)
+                if (i + BATCH_SIZE < repos.length) {
+                    console.log(`⏳ Waiting ${BATCH_DELAY}ms before next batch...`);
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+                }
+            }
+            
+            // Final summary
+            console.log(`🎉 Completed! Total ads displayed: ${allProcessedAds.length}`);
+            
+            if (allProcessedAds.length === 0) {
+                showMessage('No valid ads found. Make sure each ad has title, description, and URL.', 'error');
             }
             
         } catch (error) {
-            console.error('Error loading ads:', error);
+            console.error('❌ Error loading ads:', error);
             showMessage('Error loading ads. Check console.', 'error');
         }
     }
@@ -549,6 +561,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             width: 15%;
             cursor: pointer;
             margin-left: auto;
+            transition: all 0.3s;
         `;
         
         refreshBtn.onmouseover = () => {
@@ -563,7 +576,10 @@ document.addEventListener('DOMContentLoaded', async function() {
             refreshBtn.style.borderColor = 'white';
         };
         
-        refreshBtn.onclick = loadAds;
+        refreshBtn.onclick = () => {
+            console.log('🔄 Manual refresh requested');
+            loadAds();
+        };
         
         appBar.appendChild(refreshBtn);
     }
