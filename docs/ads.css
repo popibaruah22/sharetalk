@@ -1,0 +1,92 @@
+body {
+  margin: 0;
+  background: url('dg.jpg') no-repeat center center;
+  background-size: cover;
+  color: #ffffff;
+  min-height: 100vh;
+  overflow: hidden;
+  font-family: serif;
+  padding-bottom: 140px; /* space for bottom bar */
+}
+
+/* Bottom App Bar */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 140px;
+  font-size: 30px;
+  color: white;
+  border-top: 2px solid white;
+  background: black;
+  display: flex;
+  justify-content: space-around;
+  padding-top: 30px;     /* ✅ CREATES TOP GAP */
+  box-sizing: border-box;
+  z-index: 1000;
+}
+.bottom-bar i:hover {
+  color: chartreuse;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;              /* space between icon & text */
+  cursor: pointer;
+}
+.nav-item:hover {
+  color: chartreuse;
+}
+.nav-item i {
+  font-size: 45px;
+  color: white;
+  transition: color 0.3s ease;
+}
+
+.nav-item span {
+  font-size: 15px;
+  font-weight: 600;
+}
+.app-bar {
+  width: 100vw;
+  display: flex;
+  background: #0a0a0a;
+  position: fixed;
+  min-height: 95px;
+  top: 0;
+  z-index: 1000;
+}
+
+.app-bar button {
+  background: black;
+  margin-top: 20px;
+  margin-bottom: 20px;
+  margin-left: 70px;
+  font-size: 15px;
+  font-weight: 900;
+  border: 2px solid white;
+  font-family: serif;
+  border-radius: 15px;
+  min-height: 50px;
+  color: white;
+  width: 15%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.nav-item:hover i {
+  color: chartreuse;
+}
+
+#main {
+  font-size: 20px;
+  font-family: sans-serif;
+  background: chartreuse;
+  color: black;
+  border-color: chartreuse;
+  font-weight: 900;
+}
+#do {
+  color: chartreuse;
+}
