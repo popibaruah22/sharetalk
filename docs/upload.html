@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIBRYX/Ads/Create</title>
+    <link rel="stylesheet" href="upload.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <button class="back" onclick="location.href='about.html'">Back</button>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-ad"></i> Ad Creator</h1>
+            <p>Create beautiful ads with images. Your ad will be published instantly.</p>
+        </div>
+
+        <!-- Status Messages -->
+        <div class="status-message" id="statusMessage"></div>
+
+        <!-- Main Form -->
+        <div class="form-container">
+            <h2><i class="fas fa-plus-circle"></i> Create New Ad</h2>
+            
+            <form id="adForm">
+                <!-- Ad Details -->
+                <div class="ad-details-section">
+                    <div class="form-group">
+                        <label for="adTitle">
+                            <i class="fas fa-heading"></i> Ad Title *
+                        </label>
+                        <input type="text" id="adTitle" class="form-control" 
+                               placeholder="Amazing Product Launch" required>
+                        <small class="form-hint">Give your ad a catchy title</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="adDescription">
+                            <i class="fas fa-align-left"></i> Description *
+                        </label>
+                        <textarea id="adDescription" class="form-control" 
+                                  placeholder="Describe your product/service in detail..." 
+                                  rows="4" required></textarea>
+                        <small class="form-hint">Detailed description about your ad</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="visitUrl">
+                            <i class="fas fa-link"></i> Website URL *
+                        </label>
+                        <input type="url" id="visitUrl" class="form-control" 
+                               placeholder="https://your-website.com/product" required>
+                        <small class="form-hint">Where users will go when they click your ad</small>
+                    </div>
+                </div>
+
+                <!-- Image Upload -->
+                <div class="image-upload-section">
+                    <h3><i class="fas fa-images"></i> Upload Images</h3>
+                   <div class="image-limits">
+    <span class="limit-badge"><i class="fas fa-image"></i> Max 1 image</span>
+    <span class="limit-badge"><i class="fas fa-file"></i> Max 10MB per image</span>
+</div>
+                    
+                    <!-- Custom Image Upload Button -->
+                    <div class="custom-upload-btn">
+                        <input type="file" id="imageInput" multiple accept="image/*" style="display: none;">
+                        <div class="upload-area" id="uploadArea">
+                            <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                            <div class="upload-text">
+                                <p class="upload-main">Click to browse or drag & drop</p>
+                                <p class="upload-sub">Supports: JPG, PNG, GIF, WebP, SVG</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Images Counter -->
+                    <div class="selected-counter" id="selectedCounter">
+                        <span id="selectedCount">0</span> of 5 images selected
+                    </div>
+
+                    <!-- Image Preview Container -->
+                    <div class="image-preview-container" id="imagePreviewContainer">
+                        <!-- Image previews will appear here -->
+                        <div class="empty-state" id="emptyState">
+                            <i class="fas fa-image empty-icon"></i>
+                            <p class="empty-text">No images selected yet</p>
+                            <p class="empty-subtext">Add up to 5 images for your ad</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus-circle"></i> Create Ad
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="resetForm()">
+                        <i class="fas fa-redo"></i> Reset Form
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text">Creating your ad...</div>
+            <div class="loading-subtext" id="loadingSubtext">Please wait</div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="instructions">
+            <h3><i class="fas fa-info-circle"></i> How It Works</h3>
+            <ul>
+                <li><strong>Title & Description:</strong> Your ad content that users will see</li>
+                <li><strong>Website URL:</strong> Where users go when they click the ad</li>
+                <li><strong>Images:</strong> Upload up to 5 images (max 10MB each)</li>
+                <li><strong>Instant Publication:</strong> Your ad goes live immediately</li>
+                <li><strong>Automatic Display:</strong> Ads appear automatically on your website</li>
+            </ul>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><i class="fas fa-shield-alt"></i> Ad Creator v1.0</p>
+            <p class="footer-note">All ads are securely stored and managed</p>
+        </div>
+    </div>
+
+    <script src="upload.js"></script>
+</body>
+</html>
