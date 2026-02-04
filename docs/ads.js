@@ -1,11 +1,12 @@
-// ads.js - Fetch and display ads with batch loading
+// ads.js - Fetch and display ads with optimized batch loading
 document.addEventListener('DOMContentLoaded', async function() {
     const BACKEND_URL = 'https://musten-y.onrender.com';
     let GITHUB_CONFIG = null;
     
-    // Batch configuration
-    const BATCH_SIZE = 5;
-    const BATCH_DELAY = 1000; // 1 second between batches
+    // Optimized batch configuration
+    const INITIAL_BATCH = 3; // Load first 3 immediately
+    const BATCH_SIZE = 5;    // Subsequent batch size
+    const BATCH_DELAY = 300; // Reduced to 300ms for faster loading
     
     // Main container for ads
     let adsContainer = document.querySelector('.ads-container');
@@ -29,7 +30,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadingDiv.className = 'loading';
     loadingDiv.innerHTML = `
         <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
-            Loading ads... This may take a moment please refresh the app if it takes more than 1 minute...
+            Loading ads, If it takes more than 1 minute to load ads please refresh the app...
+        </div>
+        <div style="color: white; margin-top: 10px; font-size: 14px;">
+            First Ads loading...
         </div>
     `;
     loadingDiv.style.cssText = `
@@ -56,10 +60,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             padding: 0;
             margin-bottom: 40px;
             max-width: 600px;
+    margin-top: 10px;
             margin-left: auto;
             margin-right: auto;
             width: 100%;
-            animation: fadeIn 0.5s ease-out;
+            animation: fadeIn 0.3s ease-out;
         }
         
         .ad-image {
@@ -83,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
         
@@ -99,6 +104,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         .ads-container::-webkit-scrollbar-thumb:hover {
             background: #7fff00;
+        }
+        
+        .batch-indicator {
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 14px;
+            opacity: 0.7;
         }
         
         @media (max-width: 768px) {
@@ -123,7 +136,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const result = await response.json();
             if (result.success) {
                 GITHUB_CONFIG = result.credentials;
-                console.log('✅ GitHub credentials loaded');
+                console.log(' credentials loaded');
                 return true;
             }
             throw new Error(result.error);
@@ -142,23 +155,36 @@ document.addEventListener('DOMContentLoaded', async function() {
         };
     }
     
-    // Get ALL repositories (simplified)
+    // Get ALL repositories (with proper pagination)
     async function getAllAdRepos() {
         try {
-            console.log('Fetching repositories...');
-            let allRepos = [];
+            console.log('Fetching all ads...');
+            let allAdRepos = [];
             let page = 1;
+            let totalPages = 0;
+            const startTime = Date.now();
             
+            // Fetch all pages until we get less than 100 repos
             while (true) {
+                console.log(`📄 Fetching page ${page}...`);
+                
                 const response = await fetch(
                     `${GITHUB_CONFIG.apiBase}/user/repos?type=private&page=${page}&per_page=100`,
                     { headers: getGitHubHeaders() }
                 );
                 
-                if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
+                if (!response.ok) {
+                    console.error(`API error: ${response.status}`);
+                    break;
+                }
                 
                 const repos = await response.json();
-                if (repos.length === 0) break;
+                
+                // If no repos returned, we're done
+                if (repos.length === 0) {
+                    console.log('✅ No more ads found');
+                    break;
+                }
                 
                 // Filter for ad repos
                 const adRepos = repos.filter(repo => 
@@ -166,90 +192,46 @@ document.addEventListener('DOMContentLoaded', async function() {
                     repo.private === true
                 );
                 
-                allRepos.push(...adRepos);
+                console.log(`📦 Page ${page}: Found ${adRepos.length} ad repos (total: ${repos.length} repos)`);
                 
-                // If we got less than 100, we're done
-                if (repos.length < 100) break;
+                allAdRepos.push(...adRepos);
+                totalPages = page;
                 
+                // If we got less than 100 repos, this is the last page
+                if (repos.length < 100) {
+                    console.log('✅ Last page reached');
+                    break;
+                }
+                
+                // Increment page for next fetch
                 page++;
-                if (page > 10) break; // Safety limit
+                
+                // Safety limit: GitHub API allows up to 1000 repos (10 pages of 100)
+                if (page > 10) {
+                    console.log('⚠️ Safety limit reached: Stopped at 10 pages (1000 repos max)');
+                    break;
+                }
             }
             
-            console.log(`Found ${allRepos.length} ad repositories`);
-            return allRepos;
+            // Sort by update date (newest first)
+            allAdRepos.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+            
+            console.log(`✅ Total ad repos fetched: ${allAdRepos.length} (${Date.now() - startTime}ms)`);
+            console.log(`📊 Pages fetched: ${totalPages}`);
+            
+            // Return initial batch and remaining repos
+            return {
+                initialBatch: allAdRepos.slice(0, INITIAL_BATCH),
+                remainingRepos: allAdRepos.slice(INITIAL_BATCH)
+            };
             
         } catch (error) {
             console.error('Error fetching repos:', error);
-            return [];
+            return { initialBatch: [], remainingRepos: [] };
         }
     }
     
-    // Get file content
-    async function getFileContent(repoName, fileName) {
-        try {
-            const response = await fetch(
-                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
-                { headers: getGitHubHeaders() }
-            );
-            
-            if (!response.ok) return null;
-            
-            const fileData = await response.json();
-            return atob(fileData.content);
-            
-        } catch (error) {
-            console.error(`Error getting ${fileName}:`, error);
-            return null;
-        }
-    }
-    
-    // Get image as data URL (guaranteed to work for private repos)
-    async function getImageAsDataUrl(repoName, fileName) {
-        try {
-            console.log(`Getting image: ${repoName}/${fileName}`);
-            
-            // Get the file from GitHub API
-            const response = await fetch(
-                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
-                { headers: getGitHubHeaders() }
-            );
-            
-            if (!response.ok) {
-                console.error(`Failed to get image info: ${response.status}`);
-                return null;
-            }
-            
-            const fileData = await response.json();
-            
-            // Decode base64 content
-            const base64Content = fileData.content;
-            const mimeType = getMimeType(fileName);
-            
-            // Create data URL
-            return `data:${mimeType};base64,${base64Content}`;
-            
-        } catch (error) {
-            console.error(`Error getting image:`, error);
-            return null;
-        }
-    }
-    
-    // Helper: get MIME type from filename
-    function getMimeType(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        const mimeTypes = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'gif': 'image/gif',
-            'webp': 'image/webp',
-            'svg': 'image/svg+xml',
-            'bmp': 'image/bmp'
-        };
-        return mimeTypes[ext] || 'image/jpeg';
-    }
-    
-    // Process single ad repository
+    // Process single ad repository (optimized)
     async function processAdRepo(repo) {
         try {
             const adNumber = repo.name.match(/ad-(\d+)/)?.[1] || '?';
@@ -277,31 +259,42 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             const contents = await contentsResponse.json();
             
-            // Process files
+            // Process files in parallel
+            const filePromises = [];
+            
             for (const item of contents) {
                 if (item.type === 'file') {
                     if (item.name === 'title.txt') {
-                        adData.title = await getFileContent(repo.name, 'title.txt');
+                        filePromises.push(getFileContent(repo.name, 'title.txt').then(content => {
+                            adData.title = content;
+                        }));
                     } else if (item.name === 'description.txt') {
-                        adData.description = await getFileContent(repo.name, 'description.txt');
+                        filePromises.push(getFileContent(repo.name, 'description.txt').then(content => {
+                            adData.description = content;
+                        }));
                     } else if (item.name === 'visit.txt') {
-                        adData.visitUrl = await getFileContent(repo.name, 'visit.txt');
+                        filePromises.push(getFileContent(repo.name, 'visit.txt').then(content => {
+                            adData.visitUrl = content;
+                        }));
                     } else if (item.name.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i)) {
-                        // Get image as data URL (guaranteed to work)
-                        const imageDataUrl = await getImageAsDataUrl(repo.name, item.name);
-                        if (imageDataUrl) {
-                            adData.images.push({
-                                name: item.name,
-                                dataUrl: imageDataUrl
-                            });
-                        }
+                        filePromises.push(getImageAsDataUrl(repo.name, item.name).then(imageDataUrl => {
+                            if (imageDataUrl) {
+                                adData.images.push({
+                                    name: item.name,
+                                    dataUrl: imageDataUrl
+                                });
+                            }
+                        }));
                     }
                 }
             }
             
+            // Wait for all file processing
+            await Promise.all(filePromises);
+            
             // Only return if we have required data
             if (adData.title && adData.description && adData.visitUrl) {
-                console.log(`✅ Processed ad ${adNumber}: ${adData.title}`);
+                console.log(`✅ Processed ad ${adNumber}`);
                 return adData;
             }
             
@@ -313,13 +306,70 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
     
+    // Get file content
+    async function getFileContent(repoName, fileName) {
+        try {
+            const response = await fetch(
+                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
+                { headers: getGitHubHeaders() }
+            );
+            
+            if (!response.ok) return '';
+            
+            const fileData = await response.json();
+            return atob(fileData.content);
+            
+        } catch (error) {
+            console.error(`Error getting ${fileName}:`, error);
+            return '';
+        }
+    }
+    
+    // Get image as data URL
+    async function getImageAsDataUrl(repoName, fileName) {
+        try {
+            const response = await fetch(
+                `${GITHUB_CONFIG.apiBase}/repos/${GITHUB_CONFIG.username}/${repoName}/contents/${fileName}`,
+                { headers: getGitHubHeaders() }
+            );
+            
+            if (!response.ok) {
+                return null;
+            }
+            
+            const fileData = await response.json();
+            const base64Content = fileData.content;
+            const mimeType = getMimeType(fileName);
+            
+            return `data:${mimeType};base64,${base64Content}`;
+            
+        } catch (error) {
+            console.error(`Error getting image:`, error);
+            return null;
+        }
+    }
+    
+    // Helper: get MIME type from filename
+    function getMimeType(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const mimeTypes = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'svg': 'image/svg+xml',
+            'bmp': 'image/bmp'
+        };
+        return mimeTypes[ext] || 'image/jpeg';
+    }
+    
     // Create and display ad card
     function createAdCard(adData) {
-        // Create card container
         const card = document.createElement('div');
         card.className = 'ad-card';
         
-        // Header with title and ad number
+        // Header
         const header = document.createElement('div');
         header.style.cssText = `
             padding: 15px 20px;
@@ -359,11 +409,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             width: 100%;
             height: 400px;
             background: black;
-            position: relative;
         `;
         
         if (adData.images.length > 0) {
-            // Use the first image
             const img = document.createElement('img');
             img.className = 'ad-image';
             img.src = adData.images[0].dataUrl;
@@ -422,6 +470,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             margin: 0 auto;
             width: 90%;
             max-width: 300px;
+            transition: transform 0.2s;
         `;
         
         visitBtn.onmouseover = () => {
@@ -460,13 +509,64 @@ document.addEventListener('DOMContentLoaded', async function() {
         adsContainer.appendChild(msgDiv);
     }
     
-    // Main function to load and display ads with batch loading
+    // Update loading message
+    function updateLoadingMessage(message) {
+        loadingDiv.innerHTML = `
+            <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
+                Loading ads...
+            </div>
+            <div style="color: white; margin-top: 10px; font-size: 14px;">
+                ${message}
+            </div>
+        `;
+    }
+    
+    // Process and display a batch of ads
+    async function processAndDisplayBatch(repos, batchNumber) {
+        if (repos.length === 0) return [];
+        
+        console.log(`🔄 Processing batch ${batchNumber} (${repos.length} repos)`);
+        
+        // Process all repos in this batch in parallel
+        const batchPromises = repos.map(repo => processAdRepo(repo));
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Filter valid ads and display them
+        const validAds = batchResults.filter(ad => ad !== null);
+        
+        validAds.forEach(ad => {
+            const card = createAdCard(ad);
+            adsContainer.appendChild(card);
+        });
+        
+        console.log(`✅ Batch ${batchNumber}: Displayed ${validAds.length} ads`);
+        
+        // Add batch indicator after first batch
+        if (batchNumber > 1 && validAds.length > 0) {
+            const indicator = document.createElement('div');
+            indicator.className = 'batch-indicator';
+            indicator.textContent = `Loaded ${validAds.length} more ads...`;
+            adsContainer.appendChild(indicator);
+            
+            // Remove indicator after 1 second
+            setTimeout(() => {
+                if (indicator.parentNode) {
+                    indicator.remove();
+                }
+            }, 1000);
+        }
+        
+        return validAds;
+    }
+    
+    // Main function to load and display ads with optimized batch loading
     async function loadAds() {
-        console.log('🚀 Starting ad loading with batch processing...');
+        console.log('🚀 Starting optimized ad loading...');
         
         // Reset
         adsContainer.innerHTML = '';
         loadingDiv.style.display = 'flex';
+        updateLoadingMessage('Loading credentials...');
         
         try {
             // Load credentials
@@ -474,66 +574,68 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
             
-            // Get all ad repositories
-            const repos = await getAllAdRepos();
+            updateLoadingMessage('Loading all ads...');
             
-            if (repos.length === 0) {
+            // Get ALL ad repositories (with pagination)
+            const { initialBatch, remainingRepos } = await getAllAdRepos();
+            
+            if (initialBatch.length === 0 && remainingRepos.length === 0) {
                 showMessage('No ads found. Create your first ad!', 'info');
                 return;
             }
             
-            // Sort by update date (newest first)
-            repos.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+            console.log(`📊 Total ads to process: ${initialBatch.length} initial + ${remainingRepos.length} remaining`);
             
-            // Variables for batch loading
-            let allProcessedAds = [];
+            // Process and display initial batch immediately
+            updateLoadingMessage('Processing first ads...');
+            const initialAds = await processAndDisplayBatch(initialBatch, 1);
             
-            // Process and display in batches
-            for (let i = 0; i < repos.length; i += BATCH_SIZE) {
-                const batchRepos = repos.slice(i, i + BATCH_SIZE);
-                const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+            // Hide loading after first batch is displayed
+            if (initialAds.length > 0) {
+                loadingDiv.style.display = 'none';
+                console.log('📱 First batch displayed - loading indicator hidden');
+            } else if (remainingRepos.length === 0) {
+                showMessage('No valid ads found. Make sure each ad has title, description, and URL.', 'error');
+                return;
+            }
+            
+            // Process remaining repos in batches with minimal delay
+            let batchIndex = 2;
+            for (let i = 0; i < remainingRepos.length; i += BATCH_SIZE) {
+                const batchRepos = remainingRepos.slice(i, i + BATCH_SIZE);
                 
-                console.log(`🔄 Processing batch ${batchNumber} (repos ${i + 1}-${Math.min(i + BATCH_SIZE, repos.length)})`);
-                
-                // Process current batch
-                const batchPromises = batchRepos.map(repo => processAdRepo(repo));
-                const batchResults = await Promise.all(batchPromises);
-                
-                // Filter valid ads
-                const validBatchAds = batchResults.filter(ad => ad !== null);
-                
-                // Add to collection
-                allProcessedAds.push(...validBatchAds);
-                
-                // Display this batch's ads
-                if (validBatchAds.length > 0) {
-                    validBatchAds.forEach(ad => {
-                        const card = createAdCard(ad);
-                        adsContainer.appendChild(card);
-                    });
-                    
-                    console.log(`✅ Batch ${batchNumber}: Displayed ${validBatchAds.length} ads`);
-                    
-                    // Hide loading after first batch
-                    if (i === 0) {
-                        loadingDiv.style.display = 'none';
-                        console.log('📱 First batch displayed - loading indicator hidden');
-                    }
-                }
-                
-                // Wait 1 second before next batch (except after last batch)
-                if (i + BATCH_SIZE < repos.length) {
-                    console.log(`⏳ Waiting ${BATCH_DELAY}ms before next batch...`);
+                // Wait a very short time between batches for smoother loading
+                if (i > 0) {
                     await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
                 }
+                
+                // Process and display this batch
+                await processAndDisplayBatch(batchRepos, batchIndex);
+                batchIndex++;
             }
             
-            // Final summary
-            console.log(`🎉 Completed! Total ads displayed: ${allProcessedAds.length}`);
-            
-            if (allProcessedAds.length === 0) {
-                showMessage('No valid ads found. Make sure each ad has title, description, and URL.', 'error');
+            // Show completion message if we loaded many ads
+            const totalAds = document.querySelectorAll('.ad-card').length;
+            if (totalAds > 0) {
+                const completionMsg = document.createElement('div');
+                completionMsg.className = 'batch-indicator';
+                completionMsg.style.cssText = `
+                    color: chartreuse;
+                    font-weight: bold;
+                    padding: 15px;
+                    margin-top: 10px;
+                `;
+                completionMsg.textContent = `✅ All ads loaded! Total: ${totalAds} ads`;
+                adsContainer.appendChild(completionMsg);
+                
+                setTimeout(() => {
+                    if (completionMsg.parentNode) {
+                        completionMsg.remove();
+                    }
+                }, 3000);
             }
+            
+            console.log(`🎉 Completed! Total ads displayed: ${totalAds}`);
             
         } catch (error) {
             console.error('❌ Error loading ads:', error);
