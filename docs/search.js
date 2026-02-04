@@ -5,6 +5,11 @@
 const BACKEND_URL = "https://musten-backend.onrender.com/songs";
 let allSongs = [];
 let filteredSongs = [];
+let currentPage = 1;
+let hasMoreSongs = true;
+let isLoading = false;
+let totalSongs = 0;
+let isSearchActive = false;
 
 /* ==========================
    LOCK BACKGROUND
@@ -152,6 +157,32 @@ style.innerHTML = `
   .search-results::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.1);
   }
+
+  .search-info {
+    text-align: center;
+    color: chartreuse;
+    font-size: 18px;
+    margin: 10px 0;
+    font-family: sans-serif;
+  }
+
+  .search-loading-more {
+    text-align: center;
+    padding: 20px;
+    color: chartreuse;
+    display: none;
+  }
+
+  .search-retry-btn {
+    background: chartreuse;
+    color: black;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 10px;
+  }
 `;
 document.head.appendChild(style);
 
@@ -179,28 +210,51 @@ loaderContainer.append(loader, loaderText);
 document.body.appendChild(loaderContainer);
 
 /* ==========================
+   CREATE LOAD MORE INDICATOR
+========================== */
+const loadMoreIndicator = document.createElement("div");
+loadMoreIndicator.className = "search-loading-more";
+loadMoreIndicator.textContent = "Loading more songs...";
+resultsContainer.appendChild(loadMoreIndicator);
+
+/* ==========================
    HELPER FUNCTIONS
 ========================== */
 function extractTitleFromAudio(audioPath) {
   if (!audioPath) return "Unknown Title";
   const cleanPath = audioPath.split("?")[0];
   const fileName = cleanPath.split("/").pop();
-  return decodeURIComponent(fileName.replace(/\.[^/.]+$/, ""));
+  
+  try {
+    const decoded = decodeURIComponent(fileName);
+    return decoded.replace(/\.[^/.]+$/, "");
+  } catch (e) {
+    const cleanName = fileName.replace(/\.[^/.]+$/, "");
+    return cleanName.replace(/%20/g, ' ').replace(/%2C/g, ',').replace(/%27/g, "'");
+  }
 }
 
 function showLoading() {
   loaderContainer.style.display = "flex";
-  resultsContainer.innerHTML = "";
 }
 
 function hideLoading() {
   loaderContainer.style.display = "none";
 }
 
-function showNoResults() {
+function showLoadMore() {
+  loadMoreIndicator.style.display = "block";
+}
+
+function hideLoadMore() {
+  loadMoreIndicator.style.display = "none";
+}
+
+function showError(message) {
   resultsContainer.innerHTML = `
     <div class="search-no-results">
-      No songs found. Try a different search term.
+      ${message}
+      <button class="search-retry-btn" onclick="retryFetchAll()">Retry</button>
     </div>
   `;
 }
@@ -214,6 +268,9 @@ function createSearchCard(song, parent) {
 
   const img = document.createElement("img");
   img.src = song.thumbnail || "https://via.placeholder.com/300x200/333/fff?text=No+Image";
+  img.onerror = function() {
+    this.src = 'https://via.placeholder.com/300x200/333/fff?text=No+Image';
+  };
 
   const overlay = document.createElement("div");
   overlay.className = "search-play-overlay";
@@ -227,30 +284,45 @@ function createSearchCard(song, parent) {
   parent.appendChild(card);
 
   card.onclick = () => {
-    const params = new URLSearchParams({
-      name: title.textContent,
-      audio: song.audio,
-      thumbnail: song.thumbnail || ""
-    });
+    const params = new URLSearchParams();
+    params.append('name', encodeURIComponent(title.textContent));
+    params.append('audio', encodeURIComponent(song.audio));
+    params.append('thumbnail', encodeURIComponent(song.thumbnail || ""));
     window.open(`view.html?${params}`, "_blank");
   };
 }
 
 /* ==========================
-   DISPLAY RESULTS
+   DISPLAY SONGS
 ========================== */
-function displaySearchResults(isSearching = false) {
-  resultsContainer.innerHTML = "";
-  
-  // Show no results message when searching and no matches
-  if (isSearching && filteredSongs.length === 0) {
-    showNoResults();
-    return;
+function displaySongs() {
+  // Clear only the cards container, keep load more indicator
+  const existingContainer = resultsContainer.querySelector('.search-cards-container');
+  if (existingContainer) {
+    existingContainer.remove();
   }
   
-  // Show all songs (not searching or empty search)
+  // Also remove info if exists
+  const existingInfo = resultsContainer.querySelector('.search-info');
+  if (existingInfo) {
+    existingInfo.remove();
+  }
+  
+  // Show no results message
   if (filteredSongs.length === 0) {
-    showNoResults();
+    if (isSearchActive) {
+      resultsContainer.innerHTML = `
+        <div class="search-no-results">
+          No songs found for your search.
+        </div>
+      `;
+    } else {
+      resultsContainer.innerHTML = `
+        <div class="search-no-results">
+          
+        </div>
+      `;
+    }
     return;
   }
 
@@ -258,29 +330,116 @@ function displaySearchResults(isSearching = false) {
   const cardsContainer = document.createElement("div");
   cardsContainer.className = "search-cards-container";
   
-  // Add title for all songs view
-  if (!isSearching) {
-    const title = document.createElement("div");
-    title.className = "search-all-songs-title";
-    title.textContent = "";
-    resultsContainer.appendChild(title);
+  // Add info about total songs
+  const infoDiv = document.createElement("div");
+  infoDiv.className = "search-info";
+  if (isSearchActive) {
+    infoDiv.textContent = ``;
+  } else {
+    infoDiv.textContent = ``;
   }
+  cardsContainer.appendChild(infoDiv);
 
-  // Sort by newest first (assuming _id contains timestamp)
+  // Sort by newest first
   filteredSongs.sort((a, b) => {
-    if (a._id && b._id) return b._id.localeCompare(a._id);
+    if (a.createdAt && b.createdAt) {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
     return 0;
   });
 
   // Create individual cards
   filteredSongs.forEach(song => {
-    if (!song.name && song.audio) {
-      song.name = extractTitleFromAudio(song.audio);
-    }
     createSearchCard(song, cardsContainer);
   });
   
   resultsContainer.appendChild(cardsContainer);
+  
+  // Show/hide load more indicator
+  if (hasMoreSongs && !isSearchActive) {
+    showLoadMore();
+  } else {
+    hideLoadMore();
+  }
+}
+
+/* ==========================
+   FETCH SONGS BATCH
+========================== */
+async function fetchSongsBatch(page) {
+  if (isLoading) return;
+  
+  isLoading = true;
+  
+  try {
+    const url = `${BACKEND_URL}?page=${page}&limit=20`; // Fetch 20 at a time
+    console.log(`Fetching search page ${page}...`);
+    
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    
+    const data = await res.json();
+    
+    if (!data.songs || data.songs.length === 0) {
+      hasMoreSongs = false;
+      hideLoadMore();
+      return;
+    }
+    
+    // Add songs to allSongs array
+    data.songs.forEach(song => {
+      if (!song.name && song.audio) {
+        song.name = extractTitleFromAudio(song.audio);
+      }
+      allSongs.push(song);
+    });
+    
+    // Update totals
+    totalSongs = data.total || 0;
+    hasMoreSongs = data.hasMore;
+    
+    // Update filtered songs (if not searching)
+    if (!isSearchActive) {
+      filteredSongs = [...allSongs];
+      displaySongs();
+    }
+    
+    // Auto-fetch next page after 1 second if not searching
+    if (hasMoreSongs && !isSearchActive) {
+      setTimeout(() => {
+        currentPage++;
+        fetchSongsBatch(currentPage);
+      }, 1000);
+    }
+    
+  } catch (error) {
+    console.error("Error fetching songs:", error);
+    showError(`Failed to load songs: ${error.message}`);
+    hasMoreSongs = false;
+    hideLoadMore();
+  } finally {
+    isLoading = false;
+  }
+}
+
+/* ==========================
+   FETCH ALL SONGS (START)
+========================== */
+async function fetchAllSongs() {
+  // Reset variables
+  allSongs = [];
+  filteredSongs = [];
+  currentPage = 1;
+  hasMoreSongs = true;
+  isSearchActive = false;
+  
+  showLoading();
+  loaderText.textContent = "";
+  
+  // Start fetching first batch
+  await fetchSongsBatch(currentPage);
+  
+  hideLoading();
 }
 
 /* ==========================
@@ -291,58 +450,26 @@ function performSearch(searchTerm) {
   
   if (trimmedTerm === '') {
     // Empty search - show all songs
+    isSearchActive = false;
     filteredSongs = [...allSongs];
-    displaySearchResults(false); // Not searching
+    displaySongs();
+    
+    // Continue loading if more songs available
+    if (hasMoreSongs && !isLoading) {
+      currentPage++;
+      fetchSongsBatch(currentPage);
+    }
   } else {
     // Filter songs based on search term
+    isSearchActive = true;
     filteredSongs = allSongs.filter(song => {
-      const songName = (song.name || extractTitleFromAudio(song.audio) || "").toLowerCase();
+      const songName = (song.name || "").toLowerCase();
       const searchLower = trimmedTerm.toLowerCase();
       return songName.includes(searchLower);
     });
 
-    // Show loading only if we have a search term
-    showLoading();
-    setTimeout(() => {
-      hideLoading();
-      displaySearchResults(true); // Is searching
-    }, 300);
-  }
-}
-
-/* ==========================
-   FETCH ALL SONGS
-========================== */
-async function fetchAllSongs() {
-  try {
-    showLoading();
-    loaderText.textContent = "Loading songs...";
-    
-    const res = await fetch(BACKEND_URL);
-    if (!res.ok) throw new Error("Failed to fetch songs");
-    
-    allSongs = await res.json();
-    
-    // Add names to songs if missing
-    allSongs.forEach(song => {
-      if (!song.name && song.audio) {
-        song.name = extractTitleFromAudio(song.audio);
-      }
-    });
-
-    hideLoading();
-    
-    // Initially show all songs
-    filteredSongs = [...allSongs];
-    displaySearchResults(false); // Not searching
-    
-  } catch (error) {
-    console.error("Error fetching songs:", error);
-    loaderText.textContent = "Failed to load songs";
-    setTimeout(() => {
-      hideLoading();
-      showNoResults();
-    }, 1000);
+    // Show search results
+    displaySongs();
   }
 }
 
@@ -384,6 +511,38 @@ function setupSearchInput() {
     }
   });
 }
+
+/* ==========================
+   RETRY FUNCTION
+========================== */
+window.retryFetchAll = function() {
+  fetchAllSongs();
+};
+
+/* ==========================
+   INFINITE SCROLL
+========================== */
+let isScrolling = false;
+resultsContainer.addEventListener('scroll', () => {
+  if (isLoading || isSearchActive || !hasMoreSongs) return;
+  
+  const scrollPosition = resultsContainer.scrollTop + resultsContainer.clientHeight;
+  const scrollHeight = resultsContainer.scrollHeight;
+  
+  // Load more when near bottom
+  if (scrollPosition >= scrollHeight - 200) {
+    if (!isScrolling) {
+      isScrolling = true;
+      showLoadMore();
+      currentPage++;
+      fetchSongsBatch(currentPage);
+      
+      setTimeout(() => {
+        isScrolling = false;
+      }, 1000);
+    }
+  }
+});
 
 /* ==========================
    INITIALIZE
