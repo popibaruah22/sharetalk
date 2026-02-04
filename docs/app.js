@@ -2,6 +2,7 @@
    CONFIG
 ========================== */
 const BACKEND_URL = "https://musten-backend.onrender.com/songs";
+const BACKEND_BASE_URL = "https://musten-backend.onrender.com";
 
 /* ==========================
    LOCK BACKGROUND
@@ -21,9 +22,13 @@ function switchTab(tabName) {
   
   if (tabName === 'music') {
     document.getElementById('music-tab').classList.add('active-tab');
+    document.getElementById('music-content').classList.add('active');
+    document.getElementById('images-content').classList.remove('active');
     currentTab = 'music';
   } else if (tabName === 'images') {
     document.getElementById('images-tab').classList.add('active-tab');
+    document.getElementById('music-content').classList.remove('active');
+    document.getElementById('images-content').classList.add('active');
     currentTab = 'images';
   }
 }
@@ -153,14 +158,63 @@ style.innerHTML = `
   color: white;
   font-size: 25px;
   font-weight: 600;
+  text-align: center;
+  max-width: 300px;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
+/* Content containers */
+.content-container {
+  display: none;
+  position: fixed;
+  top: 95px;
+  bottom: 140px;
+  left: 0;
+  right: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.content-container.active {
+  display: block;
+}
+
+.images-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 20px;
+}
+
+.image-card {
+  background: white;
+  border-radius: 15px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.image-card:hover {
+  transform: scale(1.05);
+}
+
+.image-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.image-title {
+  padding: 10px;
+  color: black;
+  text-align: center;
+  font-weight: bold;
+}
+
 .error-message {
-display: none;
   position: fixed;
   top: 50%;
   left: 50%;
@@ -173,6 +227,7 @@ display: none;
   z-index: 1001;
   max-width: 400px;
   border: 2px solid chartreuse;
+  display: none;
 }
 
 .retry-btn {
@@ -202,6 +257,7 @@ display: none;
   border-radius: 20px;
   font-size: 14px;
   z-index: 100;
+  display: none;
 }
 `;
 document.head.appendChild(style);
@@ -248,10 +304,10 @@ loader.className = "loader";
 
 const loaderText = document.createElement("div");
 loaderText.className = "loader-text";
-loaderText.textContent = "Loading songs...";
+loaderText.textContent = "Loading songs. If songs do not appear after sometimes or max within 1 minute please refresh the app...";
 
 loaderWrap.append(loader, loaderText);
-musicContent.appendChild(loaderWrap);
+document.body.appendChild(loaderWrap);
 
 /* ==========================
    HELPER FUNCTIONS
@@ -274,6 +330,7 @@ function showInfo(message, duration = 3000) {
   const infoDiv = document.createElement("div");
   infoDiv.className = "info-message";
   infoDiv.textContent = message;
+  infoDiv.style.display = 'block';
   document.body.appendChild(infoDiv);
   
   setTimeout(() => {
@@ -294,6 +351,7 @@ function showError(message) {
     </p>
     <button class="retry-btn">Retry Loading</button>
   `;
+  errorDiv.style.display = 'block';
   document.body.appendChild(errorDiv);
   
   errorDiv.querySelector('.retry-btn').addEventListener('click', () => {
@@ -302,8 +360,38 @@ function showError(message) {
     currentPage = 1;
     hasMoreSongs = true;
     grid.innerHTML = '';
+    loaderWrap.style.display = 'flex';
     fetchSongsBatch(1);
   });
+}
+
+/* ==========================
+   GET PROXIED URLS
+========================== */
+function getProxiedAudioUrl(githubUrl) {
+  if (!githubUrl) return '';
+  
+  // If backend already provides audioProxy, use it
+  if (typeof githubUrl === 'object' && githubUrl.audioProxy) {
+    return githubUrl.audioProxy;
+  }
+  
+  // Otherwise construct proxied URL
+  const encodedUrl = encodeURIComponent(githubUrl);
+  return `${BACKEND_BASE_URL}/audio?url=${encodedUrl}`;
+}
+
+function getProxiedThumbnailUrl(githubUrl) {
+  if (!githubUrl) return 'https://via.placeholder.com/400x225/333/fff?text=No+Image';
+  
+  // If backend already provides thumbnailProxy, use it
+  if (typeof githubUrl === 'object' && githubUrl.thumbnailProxy) {
+    return githubUrl.thumbnailProxy;
+  }
+  
+  // Otherwise construct proxied URL
+  const encodedUrl = encodeURIComponent(githubUrl);
+  return `${BACKEND_BASE_URL}/thumbnail?url=${encodedUrl}`;
 }
 
 /* ==========================
@@ -334,16 +422,15 @@ async function fetchSongsBatch(page) {
     // Show loader for first page
     if (page === 1) {
       loaderWrap.style.display = 'flex';
-      loaderText.textContent = `Loading songs. If songs do not appear after sometimes or max within 1 minute please refresh the app...`;
     } else {
       showInfo(`Loading page ${page}...`);
     }
     
     console.log(`=== FETCHING BATCH ${page} ===`);
-    console.log(`Request URL: ${BACKEND_URL}?page=${page}&limit=5`);
     
     // Add cache-busting parameter to avoid stale data
     const url = `${BACKEND_URL}?page=${page}&limit=5&_t=${Date.now()}`;
+    console.log(`Request URL: ${url}`);
     
     const startTime = Date.now();
     const res = await fetch(url, {
@@ -362,21 +449,23 @@ async function fetchSongsBatch(page) {
     }
     
     const data = await res.json();
-    console.log(`Response data:`, {
-      songsCount: data.songs?.length || 0,
-      page: data.page,
-      total: data.total,
-      hasMore: data.hasMore,
-      cacheHit: data.cacheHit || false
-    });
+    console.log(`Response data received`);
+    
+    // Check if data structure is correct
+    if (!data || typeof data !== 'object') {
+      throw new Error("Invalid response format from server");
+    }
     
     // Update total songs count
     if (data.total) {
       totalSongs = data.total;
     }
     
+    // Get songs array
+    const songs = data.songs || [];
+    
     // Check if we got songs
-    if (!data.songs || data.songs.length === 0) {
+    if (!songs || songs.length === 0) {
       if (page === 1) {
         loaderText.textContent = "No songs found in your repositories";
         setTimeout(() => {
@@ -390,7 +479,9 @@ async function fetchSongsBatch(page) {
     // Hide loader after first successful batch
     if (page === 1) {
       loaderWrap.style.display = 'none';
-      showInfo(`Found ${totalSongs} total songs. Loading in batches...`);
+      if (totalSongs > 0) {
+        showInfo(`Found ${totalSongs} total songs. Loading in batches...`, 3000);
+      }
     }
     
     // Create a new row for this batch (5 songs)
@@ -399,16 +490,21 @@ async function fetchSongsBatch(page) {
     grid.appendChild(row);
     
     // Display each song in the batch
-    data.songs.forEach((song, index) => {
+    songs.forEach((song, index) => {
       if (!song.name && song.audio) {
         song.name = extractTitleFromAudio(song.audio);
       }
       createCard(song, row);
-      console.log(`Added song ${index + 1}: ${song.name}`);
+      console.log(`Added song ${index + 1}: ${song.name || 'Unknown'}`);
     });
     
     // Update hasMore flag
-    hasMoreSongs = data.hasMore;
+    if (data.hasMore !== undefined) {
+      hasMoreSongs = data.hasMore;
+    } else {
+      // If no hasMore flag, assume more if we got 5 songs
+      hasMoreSongs = songs.length === 5;
+    }
     
     // If there are more songs, fetch next batch after 1 second
     if (hasMoreSongs) {
@@ -423,10 +519,10 @@ async function fetchSongsBatch(page) {
     } else {
       console.log("=== ALL SONGS LOADED ===");
       console.log(`Total pages: ${page}`);
-      console.log(`Total songs: ${totalSongs}`);
+      console.log(`Total songs: ${totalSongs || 'unknown'}`);
       
       if (totalSongs > 0) {
-        showInfo(`All ${totalSongs} songs loaded!`, 2000);
+        showInfo(`All songs loaded!`, 2000);
       }
     }
     
@@ -435,16 +531,15 @@ async function fetchSongsBatch(page) {
     
     if (page === 1) {
       loaderText.textContent = "Connection failed";
-      setTimeout(() => {
-        showError(`Failed to connect to backend: ${error.message}
-        
+      showError(`Failed to connect to backend: ${error.message}
+      
 Possible issues:
-1. Backend server is glitching
+1. Backend server is not running
 2. Network connection problem
-3.  API rate limit issues
+3. CORS issue
+4. API rate limit
 
 Check console for details.`);
-      }, 1000);
     } else {
       showError(`Failed to load page ${page}: ${error.message}`);
     }
@@ -458,14 +553,18 @@ Check console for details.`);
 }
 
 /* ==========================
-   CREATE CARD
+   CREATE CARD WITH PROXIED URLS
 ========================== */
 function createCard(song, parent) {
   const card = document.createElement("div");
   card.className = "song-card";
 
+  // Get proxied URLs
+  const audioUrl = getProxiedAudioUrl(song.audio || song.audioProxy || song.audio);
+  const thumbnailUrl = getProxiedThumbnailUrl(song.thumbnail || song.thumbnailProxy || song.thumbnail);
+
   const img = document.createElement("img");
-  img.src = song.thumbnail;
+  img.src = thumbnailUrl;
   img.alt = song.name || "Song cover";
   img.onerror = function() {
     this.src = 'https://via.placeholder.com/400x225/333/fff?text=No+Image';
@@ -482,13 +581,49 @@ function createCard(song, parent) {
   card.append(img, overlay, title);
   parent.appendChild(card);
 
+  // Song click handler
   card.onclick = () => {
+    // Close any existing player window
+    if (window.playerWindow && !window.playerWindow.closed) {
+      window.playerWindow.close();
+    }
+    
+    // Create URL parameters
     const params = new URLSearchParams();
     params.append('name', encodeURIComponent(title.textContent));
-    params.append('audio', encodeURIComponent(song.audio));
-    params.append('thumbnail', encodeURIComponent(song.thumbnail));
     
-    window.open(`view.html?${params.toString()}`, "_blank");
+    // Use proxied audio URL if available, otherwise use original
+    if (audioUrl) {
+      params.append('audio', encodeURIComponent(audioUrl));
+    } else if (song.audio) {
+      params.append('audio', encodeURIComponent(song.audio));
+    }
+    
+    // Use proxied thumbnail URL if available, otherwise use original
+    if (thumbnailUrl && !thumbnailUrl.includes('placeholder.com')) {
+      params.append('thumbnail', encodeURIComponent(thumbnailUrl));
+    } else if (song.thumbnail) {
+      params.append('thumbnail', encodeURIComponent(song.thumbnail));
+    }
+    
+    // Add song ID if available
+    if (song.id) {
+      params.append('id', song.id);
+    }
+    
+    // Add timestamp to prevent caching
+    params.append('t', Date.now());
+    
+    // Log the URL for debugging
+    console.log("Opening player with URL:", `view.html?${params.toString()}`);
+    
+    // Open player
+    window.playerWindow = window.open(`view.html?${params.toString()}`, "_blank");
+    
+    // Force the new window to focus
+    if (window.playerWindow) {
+      window.playerWindow.focus();
+    }
   };
 }
 
@@ -522,22 +657,23 @@ scroll.addEventListener('scroll', () => {
 ========================== */
 console.log("=== MUSIC APP INITIALIZED ===");
 console.log(`Backend URL: ${BACKEND_URL}`);
+console.log(`Backend Base URL: ${BACKEND_BASE_URL}`);
 console.log("Starting batch fetching...");
 
 // Start fetching first batch
 fetchSongsBatch(1);
 
-// Add manual refresh button for testing
+// Add manual refresh button
 const refreshBtn = document.createElement("button");
 refreshBtn.textContent = "🔄 Refresh";
 refreshBtn.style.cssText = `
   position: fixed;
   bottom: 60px;
+  display: none;
   right: 20px;
   background: chartreuse;
   color: black;
   border: none;
-display: none;
   padding: 8px 15px;
   border-radius: 20px;
   font-weight: bold;
@@ -550,6 +686,45 @@ refreshBtn.addEventListener('click', () => {
   currentPage = 1;
   hasMoreSongs = true;
   grid.innerHTML = '';
+  loaderWrap.style.display = 'flex';
   fetchSongsBatch(1);
 });
 document.body.appendChild(refreshBtn);
+
+// Make functions available globally for debugging
+window.fetchSongsBatch = fetchSongsBatch;
+window.getProxiedAudioUrl = getProxiedAudioUrl;
+window.getProxiedThumbnailUrl = getProxiedThumbnailUrl;
+
+// Add test button for debugging
+const testBtn = document.createElement("button");
+testBtn.textContent = "🔧 Test";
+testBtn.style.cssText = `
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  opacity: 0.7;
+  display: none;
+`;
+testBtn.addEventListener('click', () => {
+  console.log("=== DEBUG INFO ===");
+  console.log("Backend URLs:", {
+    songs: BACKEND_URL,
+    base: BACKEND_BASE_URL,
+    audio: `${BACKEND_BASE_URL}/audio?url=TEST`,
+    thumbnail: `${BACKEND_BASE_URL}/thumbnail?url=TEST`
+  });
+  
+  // Test proxied URL generation
+  const testUrl = "https://raw.githubusercontent.com/user/repo/main/song.mp3";
+  console.log("Proxied audio URL example:", getProxiedAudioUrl(testUrl));
+});
+document.body.appendChild(testBtn);
