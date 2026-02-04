@@ -122,7 +122,7 @@ function updateSongUI() {
     // Update artist name if element exists
     if (artistName) {
         const artist = extractArtistName(currentSong.name);
-        artistName.textContent = artist || "Unknown Artist";
+        artistName.textContent = artist || "";
     }
     
     // Update thumbnail
