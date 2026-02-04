@@ -3,6 +3,7 @@
 ========================== */
 
 const BACKEND_URL = "https://musten-backend.onrender.com/songs";
+const BACKEND_BASE = "https://musten-backend.onrender.com";
 let allSongs = [];
 let filteredSongs = [];
 let currentPage = 1;
@@ -260,14 +261,48 @@ function showError(message) {
 }
 
 /* ==========================
-   CREATE SONG CARD
+   GET PROXIED URLS
+========================== */
+function getProxiedAudioUrl(githubUrl) {
+  if (!githubUrl) return '';
+  
+  // If URL is already a proxy URL, use it as is
+  if (githubUrl.includes('/audio?url=')) {
+    return githubUrl;
+  }
+  
+  // Convert GitHub URL to backend proxy URL
+  const encodedUrl = encodeURIComponent(githubUrl);
+  return `${BACKEND_BASE}/audio?url=${encodedUrl}`;
+}
+
+function getProxiedThumbnailUrl(githubUrl) {
+  if (!githubUrl) return 'https://via.placeholder.com/300x200/333/fff?text=No+Image';
+  
+  // If URL is already a proxy URL, use it as is
+  if (githubUrl.includes('/thumbnail?url=')) {
+    return githubUrl;
+  }
+  
+  // Convert GitHub URL to backend proxy URL
+  const encodedUrl = encodeURIComponent(githubUrl);
+  return `${BACKEND_BASE}/thumbnail?url=${encodedUrl}`;
+}
+
+/* ==========================
+   CREATE SONG CARD WITH PROXIED URLS
 ========================== */
 function createSearchCard(song, parent) {
   const card = document.createElement("div");
   card.className = "search-card";
 
+  // Get proxied URLs
+  const audioUrl = getProxiedAudioUrl(song.audio || song.audioProxy || song.audio);
+  const thumbnailUrl = getProxiedThumbnailUrl(song.thumbnail || song.thumbnailProxy || song.thumbnail);
+
   const img = document.createElement("img");
-  img.src = song.thumbnail || "https://via.placeholder.com/300x200/333/fff?text=No+Image";
+  img.src = thumbnailUrl;
+  img.alt = song.name || "Song cover";
   img.onerror = function() {
     this.src = 'https://via.placeholder.com/300x200/333/fff?text=No+Image';
   };
@@ -284,11 +319,47 @@ function createSearchCard(song, parent) {
   parent.appendChild(card);
 
   card.onclick = () => {
+    // Close any existing player window
+    if (window.playerWindow && !window.playerWindow.closed) {
+      window.playerWindow.close();
+    }
+    
+    // Create URL parameters
     const params = new URLSearchParams();
     params.append('name', encodeURIComponent(title.textContent));
-    params.append('audio', encodeURIComponent(song.audio));
-    params.append('thumbnail', encodeURIComponent(song.thumbnail || ""));
-    window.open(`view.html?${params}`, "_blank");
+    
+    // Use proxied audio URL
+    if (audioUrl) {
+      params.append('audio', encodeURIComponent(audioUrl));
+    } else if (song.audio) {
+      params.append('audio', encodeURIComponent(song.audio));
+    }
+    
+    // Use proxied thumbnail URL
+    if (thumbnailUrl && !thumbnailUrl.includes('placeholder.com')) {
+      params.append('thumbnail', encodeURIComponent(thumbnailUrl));
+    } else if (song.thumbnail) {
+      params.append('thumbnail', encodeURIComponent(song.thumbnail));
+    }
+    
+    // Add song ID if available
+    if (song.id) {
+      params.append('id', song.id);
+    }
+    
+    // Add timestamp to prevent caching
+    params.append('t', Date.now());
+    
+    // Log for debugging
+    console.log("Opening player with proxied URLs");
+    
+    // Open player
+    window.playerWindow = window.open(`view.html?${params.toString()}`, "_blank");
+    
+    // Force the new window to focus
+    if (window.playerWindow) {
+      window.playerWindow.focus();
+    }
   };
 }
 
@@ -319,7 +390,7 @@ function displaySongs() {
     } else {
       resultsContainer.innerHTML = `
         <div class="search-no-results">
-          
+          No songs found.
         </div>
       `;
     }
@@ -334,9 +405,9 @@ function displaySongs() {
   const infoDiv = document.createElement("div");
   infoDiv.className = "search-info";
   if (isSearchActive) {
-    infoDiv.textContent = ``;
+    infoDiv.textContent = `Found ${filteredSongs.length} songs matching your search`;
   } else {
-    infoDiv.textContent = ``;
+    infoDiv.textContent = `Loaded ${allSongs.length} of ${totalSongs} songs`;
   }
   cardsContainer.appendChild(infoDiv);
 
@@ -348,7 +419,7 @@ function displaySongs() {
     return 0;
   });
 
-  // Create individual cards
+  // Create individual cards with proxied URLs
   filteredSongs.forEach(song => {
     createSearchCard(song, cardsContainer);
   });
@@ -372,7 +443,7 @@ async function fetchSongsBatch(page) {
   isLoading = true;
   
   try {
-    const url = `${BACKEND_URL}?page=${page}&limit=20`; // Fetch 20 at a time
+    const url = `${BACKEND_URL}?page=${page}&limit=20&_t=${Date.now()}`; // Fetch 20 at a time
     console.log(`Fetching search page ${page}...`);
     
     const res = await fetch(url);
@@ -380,14 +451,17 @@ async function fetchSongsBatch(page) {
     
     const data = await res.json();
     
-    if (!data.songs || data.songs.length === 0) {
+    // Handle both old and new response formats
+    const songs = data.songs || data;
+    
+    if (!songs || songs.length === 0) {
       hasMoreSongs = false;
       hideLoadMore();
       return;
     }
     
     // Add songs to allSongs array
-    data.songs.forEach(song => {
+    songs.forEach(song => {
       if (!song.name && song.audio) {
         song.name = extractTitleFromAudio(song.audio);
       }
@@ -395,8 +469,8 @@ async function fetchSongsBatch(page) {
     });
     
     // Update totals
-    totalSongs = data.total || 0;
-    hasMoreSongs = data.hasMore;
+    totalSongs = data.total || allSongs.length;
+    hasMoreSongs = data.hasMore !== undefined ? data.hasMore : songs.length === 20;
     
     // Update filtered songs (if not searching)
     if (!isSearchActive) {
@@ -434,7 +508,7 @@ async function fetchAllSongs() {
   isSearchActive = false;
   
   showLoading();
-  loaderText.textContent = "";
+  loaderText.textContent = "Loading songs...";
   
   // Start fetching first batch
   await fetchSongsBatch(currentPage);
@@ -551,3 +625,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setupSearchInput();
   fetchAllSongs();
 });
+
+// Make functions available globally for debugging
+window.getProxiedAudioUrl = getProxiedAudioUrl;
+window.getProxiedThumbnailUrl = getProxiedThumbnailUrl;
