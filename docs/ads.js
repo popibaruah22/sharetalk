@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             padding: 0;
             margin-bottom: 40px;
             max-width: 600px;
-    margin-top: 10px;
+    margin-top: 30px;
             margin-left: auto;
             margin-right: auto;
             width: 100%;
