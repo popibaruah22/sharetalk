@@ -225,7 +225,7 @@ function initAudioPlayer(audioSrc) {
     // Setup audio event listeners
     setupAudioEvents();
     
-    // Load and prepare audio
+    // Load audio but don't auto-play
     loadAudio();
 }
 
@@ -245,105 +245,35 @@ function loadAudio() {
     // Load the audio
     audio.load();
     
-    // Auto-play after a short delay
-    setTimeout(() => {
-        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
-            tryAutoPlay();
-        } else {
-            // Wait for audio to be ready
-            audio.addEventListener('canplay', tryAutoPlay, { once: true });
-        }
-    }, 1000);
-}
-
-function tryAutoPlay() {
-    console.log("▶️ Attempting auto-play...");
+    // Set timeout for loading
+    const loadTimeout = setTimeout(() => {
+        console.log("⏱️ Load timeout reached");
+        updatePlayButtonState(false);
+    }, 10000);
     
-    if (!audio || audio.error) {
-        console.log("❌ Audio not ready or has error");
-        updatePlayButtonState();
-        return;
-    }
-    
-    const playPromise = audio.play();
-    
-    if (playPromise !== undefined) {
-        playPromise
-            .then(() => {
-                console.log("✅ Auto-play successful");
-                isPlaying = true;
-                updatePlayButtonState();
-                updateVinylAnimation();
-            })
-            .catch(error => {
-                console.log("ℹ️ Auto-play prevented:", error.name);
-                isPlaying = false;
-                updatePlayButtonState();
-                updateVinylAnimation();
-                
-                // User interaction required
-                if (playBtn) {
-                    playBtn.style.animation = "pulse 2s infinite";
-                }
-            });
-    }
-}
-
-function setupAudioEvents() {
-    if (!audio) return;
-    
-    // Time update - progress
-    audio.addEventListener('timeupdate', function() {
-        updateProgress();
-        updateTimeDisplay();
-    });
-    
-    // Metadata loaded - duration available
-    audio.addEventListener('loadedmetadata', function() {
-        console.log("📊 Metadata loaded, duration:", audio.duration);
-        updateTimeDisplay();
-        if (seekbar) {
-            seekbar.max = 100;
-        }
-    });
-    
-    // Can play - ready to play
+    // When audio is ready
     audio.addEventListener('canplay', function() {
-        console.log("✅ Audio can play");
-        updatePlayButtonState();
-    });
-    
-    // Playing - actually playing
-    audio.addEventListener('playing', function() {
-        console.log("▶️ Audio is now playing");
-        isPlaying = true;
-        updatePlayButtonState();
-        updateVinylAnimation();
-    });
-    
-    // Pause - paused
-    audio.addEventListener('pause', function() {
-        console.log("⏸️ Audio paused");
-        isPlaying = false;
-        updatePlayButtonState();
-        updateVinylAnimation();
-    });
-    
-    // Ended - finished playing
-    audio.addEventListener('ended', function() {
-        console.log("🏁 Audio ended");
-        isPlaying = false;
-        audio.currentTime = 0;
-        updatePlayButtonState();
-        updateVinylAnimation();
-        updateProgress();
+        clearTimeout(loadTimeout);
+        console.log("✅ Audio ready to play");
+        updatePlayButtonState(false); // Set to pause state initially
+        
+        // Update time display
         updateTimeDisplay();
-    });
+        
+        // Update play button to show play icon (not playing yet)
+        if (playIcon) {
+            playIcon.className = "fas fa-play";
+        }
+        if (playBtn) {
+            playBtn.disabled = false;
+        }
+    }, { once: true });
     
-    // Error - audio error
+    // Handle errors
     audio.addEventListener('error', function() {
+        clearTimeout(loadTimeout);
         console.error("❌ Audio error:", audio.error);
-        updatePlayButtonState();
+        updatePlayButtonState(false);
         
         let errorMessage = "Failed to load audio. ";
         switch(audio.error.code) {
@@ -365,6 +295,52 @@ function setupAudioEvents() {
         
         showError(errorMessage);
     });
+}
+
+function setupAudioEvents() {
+    if (!audio) return;
+    
+    // Time update - progress
+    audio.addEventListener('timeupdate', function() {
+        updateProgress();
+        updateTimeDisplay();
+    });
+    
+    // Metadata loaded - duration available
+    audio.addEventListener('loadedmetadata', function() {
+        console.log("📊 Metadata loaded, duration:", audio.duration);
+        updateTimeDisplay();
+        if (seekbar) {
+            seekbar.max = 100;
+        }
+    });
+    
+    // Playing - actually playing
+    audio.addEventListener('playing', function() {
+        console.log("▶️ Audio is now playing");
+        isPlaying = true;
+        updatePlayButtonState(true);
+        updateVinylAnimation();
+    });
+    
+    // Pause - paused
+    audio.addEventListener('pause', function() {
+        console.log("⏸️ Audio paused");
+        isPlaying = false;
+        updatePlayButtonState(false);
+        updateVinylAnimation();
+    });
+    
+    // Ended - finished playing
+    audio.addEventListener('ended', function() {
+        console.log("🏁 Audio ended");
+        isPlaying = false;
+        audio.currentTime = 0;
+        updatePlayButtonState(false);
+        updateVinylAnimation();
+        updateProgress();
+        updateTimeDisplay();
+    });
     
     // Waiting - buffering
     audio.addEventListener('waiting', function() {
@@ -373,14 +349,22 @@ function setupAudioEvents() {
             playIcon.className = "fas fa-spinner fa-spin";
         }
     });
+    
+    // Can play through - enough data to play without stopping
+    audio.addEventListener('canplaythrough', function() {
+        console.log("🎯 Audio can play through without stopping");
+        if (playIcon && playIcon.className === "fas fa-spinner fa-spin") {
+            playIcon.className = "fas fa-play";
+        }
+    });
 }
 
-function updatePlayButtonState() {
+function updatePlayButtonState(playing) {
     if (!playBtn || !playIcon) return;
     
     playBtn.disabled = false;
     
-    if (isPlaying) {
+    if (playing) {
         playIcon.className = "fas fa-pause";
         if (playBtn.style.animation) {
             playBtn.style.animation = "";
@@ -414,6 +398,8 @@ function updateTimeDisplay() {
     
     if (audio.duration && !isNaN(audio.duration)) {
         totalTimeEl.textContent = formatTime(audio.duration);
+    } else {
+        totalTimeEl.textContent = "0:00";
     }
 }
 
@@ -423,11 +409,56 @@ function updateTimeDisplay() {
 function setupEventListeners() {
     console.log("🔗 Setting up event listeners...");
     
-    // Play/Pause button
+    // Play/Pause button - FIXED: Use click event properly
     if (playBtn) {
-        playBtn.addEventListener('click', function() {
-            console.log("🎮 Play button clicked");
-            togglePlayPause();
+        // Remove any existing listeners
+        const newPlayBtn = playBtn.cloneNode(true);
+        playBtn.parentNode.replaceChild(newPlayBtn, playBtn);
+        playBtn = newPlayBtn;
+        playIcon = playBtn.querySelector('i');
+        
+        playBtn.addEventListener('click', function(e) {
+            console.log("🎮 Play button clicked, isPlaying:", isPlaying);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (!audio) {
+                console.log("❌ No audio element");
+                return;
+            }
+            
+            // Toggle play/pause
+            if (isPlaying) {
+                console.log("⏸️ Pausing audio");
+                audio.pause();
+            } else {
+                console.log("▶️ Attempting to play audio");
+                const playPromise = audio.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            console.log("✅ Play successful");
+                            // Success - handled by 'playing' event
+                        })
+                        .catch(error => {
+                            console.log("❌ Play failed:", error);
+                            
+                            // Show user they need to interact first
+                            if (playIcon) {
+                                playIcon.className = "fas fa-play";
+                            }
+                            
+                            // Add visual cue
+                            playBtn.style.animation = "pulse 2s infinite";
+                            
+                            // Remove animation after 3 seconds
+                            setTimeout(() => {
+                                playBtn.style.animation = "";
+                            }, 3000);
+                        });
+                }
+            }
         });
     }
     
@@ -491,25 +522,54 @@ function setupEventListeners() {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-        if (e.code === 'Space' || e.code === 'KeyK') {
+        // Prevent default only for specific keys
+        if (e.code === 'Space') {
+            e.preventDefault(); // Prevent page scroll
+            console.log("⌨️ Space key pressed");
+            if (playBtn) playBtn.click();
+        } else if (e.code === 'KeyK') {
             e.preventDefault();
-            console.log("⌨️ Space/K key pressed - toggling play");
-            togglePlayPause();
+            console.log("⌨️ K key pressed");
+            if (playBtn) playBtn.click();
         } else if (e.code === 'ArrowLeft' || e.code === 'KeyJ') {
             e.preventDefault();
-            console.log("⌨️ Left arrow/J key pressed - skipping back");
+            console.log("⌨️ Left arrow/J key pressed");
             if (prevBtn) prevBtn.click();
         } else if (e.code === 'ArrowRight' || e.code === 'KeyL') {
             e.preventDefault();
-            console.log("⌨️ Right arrow/L key pressed - skipping forward");
+            console.log("⌨️ Right arrow/L key pressed");
             if (nextBtn) nextBtn.click();
         } else if (e.code === 'Escape') {
-            console.log("⌨️ Escape key pressed - closing player");
+            console.log("⌨️ Escape key pressed");
             window.close();
         } else if (e.code === 'KeyM') {
             e.preventDefault();
-            console.log("⌨️ M key pressed - toggling mute");
+            console.log("⌨️ M key pressed");
             toggleMute();
+        }
+    });
+    
+    // Also allow clicking anywhere on the document to play on first interaction
+    let firstInteraction = true;
+    document.addEventListener('click', function(e) {
+        // Don't trigger if clicking on player controls
+        if (e.target.closest('.player-controls') || 
+            e.target.closest('.player-header') ||
+            e.target.closest('.volume-control')) {
+            return;
+        }
+        
+        if (firstInteraction && !isPlaying) {
+            console.log("👆 First user interaction detected");
+            firstInteraction = false;
+            
+            // Try to play audio on first click
+            if (audio && audio.paused) {
+                console.log("▶️ Attempting play on first interaction");
+                audio.play().catch(error => {
+                    console.log("❌ Play on interaction failed:", error);
+                });
+            }
         }
     });
     
@@ -525,26 +585,6 @@ function setupEventListeners() {
     document.head.appendChild(style);
     
     console.log("✅ Event listeners setup complete");
-}
-
-function togglePlayPause() {
-    if (!audio) {
-        console.log("❌ No audio element");
-        return;
-    }
-    
-    if (isPlaying) {
-        console.log("⏸️ Pausing audio");
-        audio.pause();
-    } else {
-        console.log("▶️ Playing audio");
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.error("Play error:", error);
-            });
-        }
-    }
 }
 
 function toggleMute() {
@@ -576,7 +616,6 @@ window.addEventListener('beforeunload', function() {
 });
 
 // Make functions available globally
-window.togglePlayPause = togglePlayPause;
 window.toggleMute = toggleMute;
 
 console.log("🎵 Player script loaded successfully!");
