@@ -405,9 +405,9 @@ function displaySongs() {
   const infoDiv = document.createElement("div");
   infoDiv.className = "search-info";
   if (isSearchActive) {
-    infoDiv.textContent = `Found ${filteredSongs.length} songs matching your search`;
+    infoDiv.textContent = ``;
   } else {
-    infoDiv.textContent = `Loaded ${allSongs.length} of ${totalSongs} songs`;
+    infoDiv.textContent = ``;
   }
   cardsContainer.appendChild(infoDiv);
 
