@@ -14,50 +14,26 @@ document.documentElement.style.overflow = "hidden";
 ========================== */
 let currentTab = 'music';
 
-// Function to switch tabs
 function switchTab(tabName) {
-  // Remove active class from all tabs
   document.querySelectorAll('.app-tab').forEach(tab => {
     tab.classList.remove('active-tab');
   });
   
-  // Add active class to clicked tab
   if (tabName === 'music') {
     document.getElementById('music-tab').classList.add('active-tab');
     currentTab = 'music';
-    // Show music content if needed
-    if (typeof showMusicContent === 'function') {
-      showMusicContent();
-    }
   } else if (tabName === 'images') {
     document.getElementById('images-tab').classList.add('active-tab');
     currentTab = 'images';
-    // Show images content if needed
-    if (typeof showImagesContent === 'function') {
-      showImagesContent();
-    }
   }
 }
 
-// Add click event listeners to tabs
 document.getElementById('music-tab').addEventListener('click', () => {
   switchTab('music');
 });
 
 document.getElementById('images-tab').addEventListener('click', () => {
   switchTab('images');
-});
-
-// Add click event to document to handle clicking outside
-document.addEventListener('click', (e) => {
-  // Check if click is outside both tab buttons
-  const musicTab = document.getElementById('music-tab');
-  const imagesTab = document.getElementById('images-tab');
-  
-  if (!musicTab.contains(e.target) && !imagesTab.contains(e.target)) {
-    // Click was outside the tab buttons - keep current tab active
-    // No action needed as active tab should remain active
-  }
 });
 
 /* ==========================
@@ -183,58 +159,55 @@ style.innerHTML = `
   to { transform: rotate(360deg); }
 }
 
-/* Content containers */
-.content-container {
-  display: none;
+.error-message {
+display: none;
   position: fixed;
-  top: 95px;
-  bottom: 140px;
-  left: 0;
-  right: 0;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.content-container.active {
-  display: block;
-}
-
-.images-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
-  padding: 20px;
-}
-
-.image-card {
-  background: white;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.9);
+  color: white;
+  padding: 30px;
   border-radius: 15px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.3s ease;
-}
-
-.image-card:hover {
-  transform: scale(1.05);
-}
-
-.image-card img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-}
-
-.image-title {
-  padding: 10px;
-  color: black;
   text-align: center;
+  z-index: 1001;
+  max-width: 400px;
+  border: 2px solid chartreuse;
+}
+
+.retry-btn {
+  background: chartreuse;
+  color: black;
+  border: none;
+  padding: 12px 24px;
+  margin-top: 20px;
+  border-radius: 8px;
+  cursor: pointer;
   font-weight: bold;
+  font-size: 16px;
+}
+
+.retry-btn:hover {
+  background: #9dff00;
+}
+
+.info-message {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: chartreuse;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 100;
 }
 `;
 document.head.appendChild(style);
 
 /* ==========================
-   CONTENT CONTAINERS
+   CREATE UI ELEMENTS
 ========================== */
 // Create music content container
 const musicContent = document.createElement("div");
@@ -248,7 +221,7 @@ imagesContent.className = "content-container";
 imagesContent.id = "images-content";
 document.body.appendChild(imagesContent);
 
-// Add images grid to images content
+// Add images grid
 const imagesGrid = document.createElement("div");
 imagesGrid.className = "images-container";
 imagesContent.appendChild(imagesGrid);
@@ -275,114 +248,212 @@ loader.className = "loader";
 
 const loaderText = document.createElement("div");
 loaderText.className = "loader-text";
-loaderText.textContent = "Loading songs... If songs do not appear within 1 minute or for a long time try the app after restarting after sometimes or later...";
+loaderText.textContent = "Loading songs...";
 
 loaderWrap.append(loader, loaderText);
 musicContent.appendChild(loaderWrap);
 
 /* ==========================
-   CONTENT MANAGEMENT FUNCTIONS
-========================== */
-function showMusicContent() {
-  document.getElementById('music-content').classList.add('active');
-  document.getElementById('images-content').classList.remove('active');
-}
-
-function showImagesContent() {
-  document.getElementById('music-content').classList.remove('active');
-  document.getElementById('images-content').classList.add('active');
-  loadImagesContent();
-}
-
-function loadImagesContent() {
-  // Clear previous images
-  imagesGrid.innerHTML = '';
-  
-  // Add placeholder images or fetch from API
-  const placeholderImages = [];
-  
-  placeholderImages.forEach(image => {
-    const card = document.createElement("div");
-    card.className = "image-card";
-    
-    const img = document.createElement("img");
-    img.src = image.url;
-    img.alt = image.title;
-    
-    const title = document.createElement("div");
-    title.className = "image-title";
-    title.textContent = image.title;
-    
-    card.append(img, title);
-    imagesGrid.appendChild(card);
-    
-    card.onclick = () => {
-      alert(`Clicked: ${image.title}`);
-      // You can implement full-screen image view here
-    };
-  });
-}
-
-/* ==========================
-   HELPER
+   HELPER FUNCTIONS
 ========================== */
 function extractTitleFromAudio(audioPath) {
   if (!audioPath) return "Unknown Title";
   const cleanPath = audioPath.split("?")[0];
   const fileName = cleanPath.split("/").pop();
   
-  // Try to decode the filename, but fallback if it fails
   try {
     const decoded = decodeURIComponent(fileName);
     return decoded.replace(/\.[^/.]+$/, "");
   } catch (e) {
-    // If decoding fails, try to clean up the filename
     const cleanName = fileName.replace(/\.[^/.]+$/, "");
-    // Remove URL-encoded characters manually
     return cleanName.replace(/%20/g, ' ').replace(/%2C/g, ',').replace(/%27/g, "'");
   }
 }
 
-/* ==========================
-   FETCH SONGS
-========================== */
-async function fetchSongs() {
-  try {
-    const res = await fetch(BACKEND_URL);
-    if (!res.ok) throw new Error("Fetch failed");
-    const allSongs = await res.json();
-
-    // Sort newest first
-    allSongs.sort((a, b) => {
-      if (a._id && b._id) return b._id.localeCompare(a._id);
-      return 0;
-    });
-
-    const batchSize = 5; // 5 songs per batch (row)
-
-    for (let i = 0; i < allSongs.length; i += batchSize) {
-      const row = document.createElement("div");
-      row.className = "song-row";
-      grid.appendChild(row);
-
-      const batch = allSongs.slice(i, i + batchSize);
-      batch.forEach(song => {
-        if (!song.name && song.audio) {
-          song.name = extractTitleFromAudio(song.audio);
-        }
-        createCard(song, row);
-      });
-
-      // ✅ Remove loader after first batch
-      if (i === 0) loaderWrap.remove();
-
-      // Wait 1 second before next batch (silent fetch)
-      await new Promise(r => setTimeout(r, 1000));
+function showInfo(message, duration = 3000) {
+  const infoDiv = document.createElement("div");
+  infoDiv.className = "info-message";
+  infoDiv.textContent = message;
+  document.body.appendChild(infoDiv);
+  
+  setTimeout(() => {
+    if (infoDiv.parentNode) {
+      infoDiv.remove();
     }
+  }, duration);
+}
 
-  } catch (e) {
-    console.error(e);
-    loaderText.textContent = "Failed to load songs";
+function showError(message) {
+  const errorDiv = document.createElement("div");
+  errorDiv.className = "error-message";
+  errorDiv.innerHTML = `
+    <h3>Error</h3>
+    <p>${message}</p>
+    <p style="font-size: 12px; margin-top: 10px; color: #ccc;">
+      Backend: ${BACKEND_URL}
+    </p>
+    <button class="retry-btn">Retry Loading</button>
+  `;
+  document.body.appendChild(errorDiv);
+  
+  errorDiv.querySelector('.retry-btn').addEventListener('click', () => {
+    errorDiv.remove();
+    // Reset and start fresh
+    currentPage = 1;
+    hasMoreSongs = true;
+    grid.innerHTML = '';
+    fetchSongsBatch(1);
+  });
+}
+
+/* ==========================
+   VARIABLES FOR BATCH FETCHING
+========================== */
+let currentPage = 1;
+let isLoading = false;
+let hasMoreSongs = true;
+let totalSongs = 0;
+
+/* ==========================
+   FETCH 5 SONGS AT A TIME
+========================== */
+async function fetchSongsBatch(page) {
+  if (isLoading) {
+    console.log("Already loading, skipping...");
+    return;
+  }
+  
+  if (!hasMoreSongs && page > 1) {
+    console.log("No more songs to fetch");
+    return;
+  }
+  
+  isLoading = true;
+  
+  try {
+    // Show loader for first page
+    if (page === 1) {
+      loaderWrap.style.display = 'flex';
+      loaderText.textContent = `Loading songs. If songs do not appear after sometimes or max within 1 minute please refresh the app...`;
+    } else {
+      showInfo(`Loading page ${page}...`);
+    }
+    
+    console.log(`=== FETCHING BATCH ${page} ===`);
+    console.log(`Request URL: ${BACKEND_URL}?page=${page}&limit=5`);
+    
+    // Add cache-busting parameter to avoid stale data
+    const url = `${BACKEND_URL}?page=${page}&limit=5&_t=${Date.now()}`;
+    
+    const startTime = Date.now();
+    const res = await fetch(url, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    });
+    const fetchTime = Date.now() - startTime;
+    
+    console.log(`Fetch completed in ${fetchTime}ms, Status: ${res.status}`);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("Response error:", errorText);
+      throw new Error(`Server returned ${res.status}: ${res.statusText}`);
+    }
+    
+    const data = await res.json();
+    console.log(`Response data:`, {
+      songsCount: data.songs?.length || 0,
+      page: data.page,
+      total: data.total,
+      hasMore: data.hasMore,
+      cacheHit: data.cacheHit || false
+    });
+    
+    // Update total songs count
+    if (data.total) {
+      totalSongs = data.total;
+    }
+    
+    // Check if we got songs
+    if (!data.songs || data.songs.length === 0) {
+      if (page === 1) {
+        loaderText.textContent = "No songs found in your repositories";
+        setTimeout(() => {
+          showError("No songs found. Make sure your GitHub repos have title.txt, .mp3, and image files.");
+        }, 2000);
+      }
+      hasMoreSongs = false;
+      return;
+    }
+    
+    // Hide loader after first successful batch
+    if (page === 1) {
+      loaderWrap.style.display = 'none';
+      showInfo(`Found ${totalSongs} total songs. Loading in batches...`);
+    }
+    
+    // Create a new row for this batch (5 songs)
+    const row = document.createElement("div");
+    row.className = "song-row";
+    grid.appendChild(row);
+    
+    // Display each song in the batch
+    data.songs.forEach((song, index) => {
+      if (!song.name && song.audio) {
+        song.name = extractTitleFromAudio(song.audio);
+      }
+      createCard(song, row);
+      console.log(`Added song ${index + 1}: ${song.name}`);
+    });
+    
+    // Update hasMore flag
+    hasMoreSongs = data.hasMore;
+    
+    // If there are more songs, fetch next batch after 1 second
+    if (hasMoreSongs) {
+      console.log(`Waiting 1 second before fetching page ${page + 1}...`);
+      
+      setTimeout(() => {
+        currentPage++;
+        console.log(`=== AUTO-FETCHING BATCH ${currentPage} ===`);
+        fetchSongsBatch(currentPage);
+      }, 1000);
+      
+    } else {
+      console.log("=== ALL SONGS LOADED ===");
+      console.log(`Total pages: ${page}`);
+      console.log(`Total songs: ${totalSongs}`);
+      
+      if (totalSongs > 0) {
+        showInfo(`All ${totalSongs} songs loaded!`, 2000);
+      }
+    }
+    
+  } catch (error) {
+    console.error("=== FETCH ERROR ===", error);
+    
+    if (page === 1) {
+      loaderText.textContent = "Connection failed";
+      setTimeout(() => {
+        showError(`Failed to connect to backend: ${error.message}
+        
+Possible issues:
+1. Backend server is glitching
+2. Network connection problem
+3.  API rate limit issues
+
+Check console for details.`);
+      }, 1000);
+    } else {
+      showError(`Failed to load page ${page}: ${error.message}`);
+    }
+    
+    hasMoreSongs = false;
+    
+  } finally {
+    isLoading = false;
+    console.log(`=== BATCH ${page} COMPLETED ===\n`);
   }
 }
 
@@ -396,6 +467,9 @@ function createCard(song, parent) {
   const img = document.createElement("img");
   img.src = song.thumbnail;
   img.alt = song.name || "Song cover";
+  img.onerror = function() {
+    this.src = 'https://via.placeholder.com/400x225/333/fff?text=No+Image';
+  };
 
   const overlay = document.createElement("div");
   overlay.className = "play-overlay";
@@ -409,7 +483,6 @@ function createCard(song, parent) {
   parent.appendChild(card);
 
   card.onclick = () => {
-    // FIX: Properly encode all URL parameters to handle special characters in audio URLs
     const params = new URLSearchParams();
     params.append('name', encodeURIComponent(title.textContent));
     params.append('audio', encodeURIComponent(song.audio));
@@ -420,6 +493,63 @@ function createCard(song, parent) {
 }
 
 /* ==========================
-   INIT
+   INFINITE SCROLL (backup)
 ========================== */
-fetchSongs();
+let isScrolling = false;
+scroll.addEventListener('scroll', () => {
+  if (isLoading || !hasMoreSongs) return;
+  
+  const scrollPosition = scroll.scrollTop + scroll.clientHeight;
+  const scrollHeight = scroll.scrollHeight;
+  
+  // Load more when 90% scrolled
+  if (scrollPosition >= scrollHeight * 0.9) {
+    if (!isScrolling) {
+      isScrolling = true;
+      console.log("Scroll detected, loading more...");
+      currentPage++;
+      fetchSongsBatch(currentPage);
+      
+      setTimeout(() => {
+        isScrolling = false;
+      }, 2000);
+    }
+  }
+});
+
+/* ==========================
+   INITIALIZE
+========================== */
+console.log("=== MUSIC APP INITIALIZED ===");
+console.log(`Backend URL: ${BACKEND_URL}`);
+console.log("Starting batch fetching...");
+
+// Start fetching first batch
+fetchSongsBatch(1);
+
+// Add manual refresh button for testing
+const refreshBtn = document.createElement("button");
+refreshBtn.textContent = "🔄 Refresh";
+refreshBtn.style.cssText = `
+  position: fixed;
+  bottom: 60px;
+  right: 20px;
+  background: chartreuse;
+  color: black;
+  border: none;
+display: none;
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  opacity: 0.7;
+`;
+refreshBtn.addEventListener('click', () => {
+  console.log("Manual refresh triggered");
+  currentPage = 1;
+  hasMoreSongs = true;
+  grid.innerHTML = '';
+  fetchSongsBatch(1);
+});
+document.body.appendChild(refreshBtn);
