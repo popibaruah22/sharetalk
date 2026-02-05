@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     function updateLoadingMessage(message) {
         loadingDiv.innerHTML = `
             <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
-             Loading ADS. If it takes more than 1 minute max to load and display ads on the page please refresh the app and try again...
+             Loading ADS. If it takes more than 1-2 minute max to load and display ads on the page please refresh the app and try again...
             </div>
             <div style="color: white; margin-top: 10px; font-size: 14px;">
                 ${message}
