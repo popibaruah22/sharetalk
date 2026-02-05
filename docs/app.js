@@ -304,7 +304,7 @@ loader.className = "loader";
 
 const loaderText = document.createElement("div");
 loaderText.className = "loader-text";
-loaderText.textContent = "Loading songs. If songs do not appear after sometimes or max within 1 minute please refresh the app...";
+loaderText.textContent = "Loading songs. If songs do not appear after sometimes or max within 1-2 minute please refresh the app...";
 
 loaderWrap.append(loader, loaderText);
 document.body.appendChild(loaderWrap);
