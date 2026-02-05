@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadingDiv.className = 'loading';
     loadingDiv.innerHTML = `
         <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
-            Loading ads, If it takes more than 1 minute to load ads please refresh the app...
+           Loading ads, If it takes more than 1 minute to load ads please refresh the app...
         </div>
         <div style="color: white; margin-top: 10px; font-size: 14px;">
             First Ads loading...
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Load credentials
     async function loadCredentials() {
         try {
-            console.log('Loading credentials...');
+            console.log('Loading ...');
             const response = await fetch(`${BACKEND_URL}/api/credentials`);
             if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
             
@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     function updateLoadingMessage(message) {
         loadingDiv.innerHTML = `
             <div style="color: chartreuse; font-size: 24px; font-weight: bold;">
-                Loading ads...
+             Loading ADS. If it takes more than 1 minute max to load and display ads on the page please refresh the app and try again...
             </div>
             <div style="color: white; margin-top: 10px; font-size: 14px;">
                 ${message}
@@ -566,7 +566,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Reset
         adsContainer.innerHTML = '';
         loadingDiv.style.display = 'flex';
-        updateLoadingMessage('Loading credentials...');
+        updateLoadingMessage('Loading ads...');
         
         try {
             // Load credentials
@@ -574,7 +574,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
             
-            updateLoadingMessage('Loading all ads...');
+            updateLoadingMessage('Processing ads...');
             
             // Get ALL ad repositories (with pagination)
             const { initialBatch, remainingRepos } = await getAllAdRepos();
@@ -587,7 +587,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.log(`📊 Total ads to process: ${initialBatch.length} initial + ${remainingRepos.length} remaining`);
             
             // Process and display initial batch immediately
-            updateLoadingMessage('Processing first ads...');
+            updateLoadingMessage('Ads found displaying...');
             const initialAds = await processAndDisplayBatch(initialBatch, 1);
             
             // Hide loading after first batch is displayed
